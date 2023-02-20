@@ -1,0 +1,3 @@
+../Core/Src/gnss_parser.c:24:9:hex2int	16	static
+../Core/Src/gnss_parser.c:35:9:nmea0183_checksum	24	static
+../Core/Src/gnss_parser.c:44:10:nmea_parser	280	static
