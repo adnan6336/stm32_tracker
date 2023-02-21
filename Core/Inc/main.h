@@ -46,6 +46,8 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
+void send_current_location_via_sms();
+void send_location_packet_via_sms();
 
 /* USER CODE END EM */
 
@@ -67,6 +69,8 @@ void Error_Handler(void);
 #define GNS_RX_GPIO_Port GPIOA
 #define WD_Pin GPIO_PIN_4
 #define WD_GPIO_Port GPIOA
+#define RI_Pin GPIO_PIN_6
+#define RI_GPIO_Port GPIOA
 #define RTS_Pin GPIO_PIN_1
 #define RTS_GPIO_Port GPIOB
 #define CTS_Pin GPIO_PIN_2
