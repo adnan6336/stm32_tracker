@@ -36,11 +36,11 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define NMEA_MAX_CHARS 85
-#define NMEA_MAX_LINES 14
+#define NMEA_MAX_LINES 4
 #define TIMCLOCK   64000000
 #define PRESCALAR  640
 #define NUMVAL 2
-#define MAX_COMMAND_LEN 30 //maximum command
+#define MAX_COMMAND_LEN 50 //maximum command
 #define MAX_FLASH_LEN 15 //maximum length of bytes to save in flash
 #define rTime 180
 #define mainCount 120
@@ -54,6 +54,8 @@
 #define RESPONSE_MAX_LINE 6
 #define RESPONSE_MAX_CHAR 50
 #define De 1
+#define MAX_DOMAIN_CHAR 51 //max is 50
+#define MAX_PORT_CHAR 6 //max is 5
 
 //uint8_t a=0;
 /* USER CODE END PD */
@@ -151,10 +153,10 @@ volatile uint8_t commandCase = 0;
 volatile uint8_t isResponseOk = 0;
 volatile uint8_t recResponse = 0;
 uint8_t imei[8];
-//uint8_t portAdd[] = "12345";
-//uint8_t portAdd[6] = "6503";//osama portal
-uint8_t portAdd[6] = "9000";//tanzeel portal
-uint8_t domainAdd[50] = "\"182.180.188.205\"";
+//uint8_t portAdd[MAX_PORT_CHAR] = "12345";
+//uint8_t portAdd[MAX_PORT_CHAR] = "6503";//osama portal
+uint8_t portAdd[MAX_PORT_CHAR] = "9000";//tanzeel portal
+uint8_t domainAdd[MAX_DOMAIN_CHAR] = "182.180.188.205";
 //uint8_t domainAdd[] = "\"103.217.177.163\"";
 uint8_t msgcleared = 0;
 char tcpCommand[50];
@@ -967,7 +969,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 			if (GNSS_BUFFER[0] == '\n') {
 				nmeaLC++;
 				if (nmeaLC > NMEA_MAX_LINES - 1) {
-					nmeaLC = 0;
+					nmeaLC = NMEA_MAX_LINES -1;
 				}
 				nmeaCC = 0;
 			} else {
@@ -1087,24 +1089,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 						char *y;
 						y = strchr(responseBuffer[tLine + 1], '#');
 						if (y != NULL) {
-							// HAL_UART_Transmit(&huart4, "command rec",
-							// sizeof("command rec"), 100);
-
 							//command found!!!
 							//---extract the command.
 							ind1 = x - (char) responseBuffer[tLine + 1] + 1;
 							ind2 = y - (char) responseBuffer[tLine + 1] - 1;
-							substring(sCommand, responseBuffer[tLine + 1], ind1,
-									ind2);
+							substring(sCommand, responseBuffer[tLine + 1], ind1,ind2);
 							//---check command type
-							//--->RES0 = reset user PIN and registered NUMBER
-							//--->RNUM3322336979xxxx = register new owner's number
-							//--->RPIN = set new pin
-							//--->WHERE
-							//
-							if (sCommand[0] == 'R' && sCommand[1] == 'E'
-									&& sCommand[2] == 'S' && sCommand[3] == '0'
-											&& ind2 == 4) {
+							//--->1)RES0 = reset user PIN and registered NUMBER
+							//--->2)RNUM3322336979xxxx = register new owner's number
+							//--->3)RPIN = set new pin
+							//--->4)WHERE
+							//--->5)SERVER,DNS,PORT (DNS<=50,PORT<=5)
+							if(sCommand[0] == 'R'
+							&& sCommand[1] == 'E'
+							&& sCommand[2] == 'S'
+							&& sCommand[3] == '0'
+							&& ind2 == 4) {
 								//--- reset command received.
 								cPin[0] = '1';
 								cPin[1] = '2';
@@ -1113,17 +1113,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 								//---saving to flash memory
 								save_to_flash();
 								//printf("Reset Completed\n");
-							} else if (sCommand[0] == 'R' && sCommand[1] == 'N'
-									&& sCommand[2] == 'U' && sCommand[3] == 'M'
-											&& ind2 == 18) {
-								// HAL_UART_Transmit(&huart4, "RNUM inside\n", 12,
-								// 100);
+							} else if (sCommand[0] == 'R'
+									&& sCommand[1] == 'N'
+									&& sCommand[2] == 'U'
+									&& sCommand[3] == 'M'
+									&& ind2 == 18) {
 								//---owner number registration command received
 								//printf("number registration command received\n");
-								if (sCommand[14] == cPin[0]
-									&& sCommand[15] == cPin[1]
-									&& sCommand[16] == cPin[2]
-									&& sCommand[17] == cPin[3]) {
+								if(sCommand[14] == cPin[0]
+								&& sCommand[15] == cPin[1]
+								&& sCommand[16] == cPin[2]
+								&& sCommand[17] == cPin[3]) {
 									//PIN is valid!!!
 									//---register new number
 									for (uint8_t m = 0; m < 10; m++) {
@@ -1136,21 +1136,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 									//---send success message(todo)
 								} else {
-									// HAL_UART_Transmit(&huart4, "WRONGPIN\n", 9,
-									// 100);
 									// incorrect pin, send message (incoorect pin),(todo)
 									// *future* stop sending message after 3 fails
 								}
-							} else if (sCommand[0] == 'R' && sCommand[1] == 'P'
-									&& sCommand[2] == 'I' && sCommand[3] == 'N'
-											&& ind2 == 12 && isOwner == 1) {
+							} else if (sCommand[0] == 'R'
+									&& sCommand[1] == 'P'
+									&& sCommand[2] == 'I'
+									&& sCommand[3] == 'N'
+									&& ind2 == 12
+									&& isOwner == 1) {
 								//---SET PIN command received from owner.
 								// RPINxxxxNNNN
 								//printf("set PIN command received\n");
 								if (sCommand[4] == cPin[0]
-														&& sCommand[5] == cPin[1]
-																			   && sCommand[6] == cPin[2]
-																									  && sCommand[7] == cPin[3]) {
+								&& sCommand[5] == cPin[1]
+								&& sCommand[6] == cPin[2]
+								&& sCommand[7] == cPin[3]) {
 									//old PIN is valid!!!
 									//---set new pin
 									cPin[0] = sCommand[8];
@@ -1161,14 +1162,28 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 									save_to_flash();
 									//printf("NEW PIN set \n");
 								}
-							} else if (sCommand[0] == 'W' && sCommand[1] == 'H'
-									&& sCommand[2] == 'E' && sCommand[3] == 'R'
-											&& sCommand[4] == 'E' && isOwner == 1) {
-								// HAL_UART_Transmit(&huart4, "where command",
-								// sizeof("where command"), 100);
+							} else if (sCommand[0] == 'W'
+									&& sCommand[1] == 'H'
+									&& sCommand[2] == 'E'
+									&& sCommand[3] == 'R'
+									&& sCommand[4] == 'E'
+									&& isOwner == 1) {
+								//WHERE API REQUEST RECEIVED
 								isWhereApiCalled = 1;
+							} else if (sCommand[0] == 'S'
+									&& sCommand[1] == 'E'
+									&& sCommand[2] == 'R'
+									&& sCommand[3] == 'V'
+									&& sCommand[4] == 'E'
+									&& sCommand[5] == 'R'
+									&& sCommand[6] == ','
+									&& isOwner == 1) {
+								//SERVER CONFIG COMMAND RECEIVED
+								check_command_DNS(sCommand);///handle the SERVER CONFIG COMMAND
+
 							}
 						}
+
 					}
 
 				}
@@ -1670,9 +1685,9 @@ uint8_t estabilish_tcp() {
 	// sizeof("est tcp"), 100);
 	send_command("+++", 10, 1, 0, 0);
 	memset(tcpCommand, 0, sizeof(tcpCommand));
-	strcat(tcpCommand, "AT+QIOPEN=\"TCP\",");
+	strcat(tcpCommand, "AT+QIOPEN=\"TCP\",\"");
 	strcat(tcpCommand, domainAdd);
-	strcat(tcpCommand, ",");
+	strcat(tcpCommand, "\",");
 	strcat(tcpCommand, portAdd);
 	strcat(tcpCommand, "\r\n");
 	// printf("--Sent AT+QIDEACT \n");
@@ -1726,8 +1741,6 @@ void where_api_handler() {
 		// 100);
 		send_command("AT+CREG?\r\n", 3, 3, 3, 1);
 		if (isReg == 1) {
-			//todo send current location via sms
-			//printf("sending current location");
 			send_current_location_via_sms(); //sending current location
 			isWhereApiCalled = 0;
 		}
@@ -2111,10 +2124,10 @@ void send_current_location_via_sms() {
 		strcat(tempMsg, ",");
 		memset(buf, 0, sizeof(buf));
 		int2string(speed, buf);
-		strcat(tempMsg, ",");
 		strcat(tempMsg, buf);
 		uint8_t tempCount = 0;
 
+		//todo replace while with for loop
 		while (tempMsg[tempCount] != NULL) {
 			tempCount++;
 		}
@@ -2187,6 +2200,42 @@ char* int2string(int num, char *str) {
 	}
 	sprintf(str, "%d", num);
 	return str;
+}
+
+void check_command_DNS(char* command){
+		    //check for data integrity by counting commas.
+		    //there must be 2 commas in total.
+		    uint8_t commaPosition[2]={0,0};
+		    uint8_t totalCommas=0;
+		    for (uint8_t a=0;a<MAX_COMMAND_LEN;a++){
+		        if(command[a]==','){
+		            if(totalCommas<2){
+		                commaPosition[totalCommas]=a;
+		            }
+		            totalCommas++;
+		        }
+		    }
+		    if(totalCommas ==2 && commaPosition[0] == 6 ){
+		        //two commas found, and first one is on 6th index.
+		        //data is good.
+		    	memset(portAdd,0,sizeof(portAdd));
+		    	memset(domainAdd,0,sizeof(domainAdd));
+
+		        //extract dns
+	            for(uint8_t a=commaPosition[0]+1;a<commaPosition[1];a++){
+	                    domainAdd[a-(commaPosition[0]+1)]=command[a];
+	                }
+	            //extract port
+	    	    for(uint8_t a=commaPosition[1]+1;a<commaPosition[1]+7;a++){
+	    	        if(command[a]!=NULL){
+	    	            portAdd[a-(commaPosition[1]+1)] = command[a];
+	    	        }
+	    	    }
+	    	    //todo save to flash please.
+		    }
+		    else{
+//		        printf("Data is bad");
+		    }
 }
 
 /* USER CODE END 4 */

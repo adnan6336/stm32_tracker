@@ -49,6 +49,10 @@ extern "C" {
 void send_current_location_via_sms();
 void send_location_packet_via_sms();
 
+
+
+
+void check_command_DNS(char* command);
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
