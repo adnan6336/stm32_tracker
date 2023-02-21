@@ -41,7 +41,6 @@
 #define PRESCALAR  640
 #define NUMVAL 2
 #define MAX_COMMAND_LEN 50 //maximum command
-#define MAX_FLASH_LEN 15 //maximum length of bytes to save in flash
 #define rTime 180
 #define mainCount 120
 #define smsBunch 10
@@ -119,7 +118,8 @@ static const uint16_t crctab16[] = { 0X0000, 0X1189, 0X2312, 0X329B, 0X4624,
 		0X1FF9, 0XF78F, 0XE606, 0XD49D, 0XC514, 0XB1AB, 0XA022, 0X92B9, 0X8330,
 		0X7BC7, 0X6A4E, 0X58D5, 0X495C, 0X3DE3, 0X2C6A, 0X1EF1, 0X0F78, };
 
-
+uint8_t locationDataIntervalA = 5; //Location packet interval when ignition is on
+uint8_t locationDataIntervalB = 5; //Location packet interval when ignition is off
 uint8_t isSMSActive=0;
 uint8_t indicationCounter = 0;
 uint8_t crcc;
@@ -199,24 +199,24 @@ static void MX_TIM16_Init(void);
 static void MX_TIM14_Init(void);
 /* USER CODE BEGIN PFP */
 
-char* int2string(int num, char *str);
-void clearit();
-void rebootsystem();
-void send_login_packet();
-void send_data_packet();
-void send_hb_packet();
-uint8_t checkdatasize();
-void save_data_packet();
-void where_api_handler();
-uint8_t read_data_packet();
-uint16_t GetCrc16(const uint8_t *pData, int nLength);
-uint8_t get_elements(char *array, uint8_t size);
-void send_command(char *command, uint16_t timeout, uint8_t caseId,
-		uint8_t retryCount, uint8_t isReset);
-void quectel_init();
-uint8_t estabilish_tcp();
-void incoming_msg_handler();
-char* substring(char *destination, const char *source, uint8_t beg, uint8_t n);
+//char* int2string(int num, char *str);
+//void clearit();
+//void rebootsystem();
+//void send_login_packet();
+//void send_data_packet();
+//void send_hb_packet();
+//uint8_t checkdatasize();
+//void save_data_packet();
+//void where_api_handler();
+//uint8_t read_data_packet();
+//uint16_t GetCrc16(const uint8_t *pData, int nLength);
+//uint8_t get_elements(char *array, uint8_t size);
+//void send_command(char *command, uint16_t timeout, uint8_t caseId,
+//		uint8_t retryCount, uint8_t isReset);
+//void quectel_init();
+//uint8_t estabilish_tcp();
+//void incoming_msg_handler();
+//char* substring(char *destination, const char *source, uint8_t beg, uint8_t n);
 
 /* USER CODE END PFP */
 
@@ -427,7 +427,7 @@ int main(void)
 		}
 		while (isTcpOpen == 1 && isLoggedIn == 1 && isDataMode == 1) {
 			stats = 7;
-			HAL_Delay(LOC_PKT_INTVL);
+			HAL_Delay(locationDataIntervalA*1000);
 			heartBeatTimer++;
 			if (heartBeatTimer > 36) {
 				stats = 8;
@@ -1179,7 +1179,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 									&& sCommand[6] == ','
 									&& isOwner == 1) {
 								//SERVER CONFIG COMMAND RECEIVED
-								check_command_DNS(sCommand);///handle the SERVER CONFIG COMMAND
+								check_command_SERVER(sCommand);///handle the SERVER CONFIG COMMAND
+
+							} else if (sCommand[0] == 'T'
+									&& sCommand[1] == 'I'
+									&& sCommand[2] == 'M'
+									&& sCommand[3] == 'E'
+									&& sCommand[4] == 'R'
+									&& sCommand[5] == ','
+									&& isOwner == 1) {
+								//TIMER CONFIG COMMAND RECEIVED
+								check_command_TIMER(sCommand);///handle the TIMER CONFIG COMMAND
 
 							}
 						}
@@ -1544,14 +1554,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		tempGps = nmea_parser(nmeaResponse, NMEA_MAX_CHARS,&crcc,&rCrc);
 		if (tempGps != NULL) {
 			gps_info = tempGps;
-			// crcc = 1;
 		}
 		else{
-			HAL_UART_Transmit(&huart4, "WRONG", 5, 100);
+//			HAL_UART_Transmit(&huart4, "WRONG", 5, 100);
 		}
-		// else{
-		// crcc = 0;
-		// }
 		HAL_TIM_Base_Stop_IT(&htim17);
 		isGNSSTimStart = 0;
 		if (tim6Count > 5) {
@@ -2202,7 +2208,7 @@ char* int2string(int num, char *str) {
 	return str;
 }
 
-void check_command_DNS(char* command){
+void check_command_SERVER(char* command){
 		    //check for data integrity by counting commas.
 		    //there must be 2 commas in total.
 		    uint8_t commaPosition[2]={0,0};
@@ -2237,7 +2243,57 @@ void check_command_DNS(char* command){
 //		        printf("Data is bad");
 		    }
 }
+void check_command_TIMER(char* command){
+    char t1[4],t2[4];
+//    uint8_t timer1=5,timer2=5;
 
+    //check for data integrity by counting commas.
+    //there must be 2 commas in total.
+    //t1 and t2 both must no be greater than 3 chars.
+
+    uint8_t commaPosition[2]={0,0};
+    uint8_t totalCommas=0;
+    for (uint8_t a=0;a<MAX_COMMAND_LEN;a++){
+        if(command[a]==','){
+            if(totalCommas<2){
+                commaPosition[totalCommas]=a;
+            }
+            totalCommas++;
+        }
+    }
+    uint8_t comaDiff = 0;
+    comaDiff = commaPosition[1] - commaPosition[0];
+    if(totalCommas ==2
+    && commaPosition[0] == 5
+    && comaDiff < 5
+    && comaDiff > 1){
+        //two commas found, and first one is on 5th index.
+        //t1 has 1-3 chars
+        //data is good.
+    	memset(t1,0,sizeof(t1));
+    	memset(t2,0,sizeof(t2));
+
+        //extract t1
+        for(uint8_t a=commaPosition[0]+1;a<commaPosition[1];a++){
+                t1[a-(commaPosition[0]+1)]=command[a];
+            }
+        //extract t2
+	    for(uint8_t a=commaPosition[1]+1;a<commaPosition[1]+4;a++){
+	        if(command[a]!=NULL){
+	            t2[a-(commaPosition[1]+1)] = command[a];
+	        }
+	    }
+	    locationDataIntervalA = atoi(t1);
+	    locationDataIntervalB = atoi(t2);
+	    locationDataIntervalA = locationDataIntervalA > 180 ? 180 : locationDataIntervalA;
+	    locationDataIntervalB = locationDataIntervalB > 180 ? 180 : locationDataIntervalB;
+	    //todo save to flash please.
+    }
+    else{
+//		        printf("Data is bad");
+    }
+
+}
 /* USER CODE END 4 */
 
 /**

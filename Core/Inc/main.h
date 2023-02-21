@@ -48,11 +48,29 @@ extern "C" {
 /* USER CODE BEGIN EM */
 void send_current_location_via_sms();
 void send_location_packet_via_sms();
+char* int2string(int num, char *str);
+void clearit();
+void rebootsystem();
+void send_login_packet();
+void send_data_packet();
+void send_hb_packet();
+uint8_t checkdatasize();
+void save_data_packet();
+void where_api_handler();
+uint8_t read_data_packet();
+uint16_t GetCrc16(const uint8_t *pData, int nLength);
+uint8_t get_elements(char *array, uint8_t size);
+void send_command(char *command, uint16_t timeout, uint8_t caseId,
+		uint8_t retryCount, uint8_t isReset);
+void quectel_init();
+uint8_t estabilish_tcp();
+void incoming_msg_handler();
+char* substring(char *destination, const char *source, uint8_t beg, uint8_t n);
 
 
 
-
-void check_command_DNS(char* command);
+void check_command_SERVER(char* command);
+void check_command_TIMER(char* command);
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
