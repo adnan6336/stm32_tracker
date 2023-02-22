@@ -239,7 +239,8 @@ uint8_t* nmea_parser(char *NR,uint8_t responseLenght,uint8_t *checkSum ,uint8_t 
 		tempData2[1]=tempData[1];
 		uint8_t t1=2;
 		uint8_t t2=0;
-		char tB[8];
+		char tB[9];
+		memset(tB,0,sizeof(tB));
 		while(tempData[t1]!=NULL){
 			if(tempData[t1]!='.'){
 				tB[t2]=tempData[t1];
@@ -254,8 +255,11 @@ uint8_t* nmea_parser(char *NR,uint8_t responseLenght,uint8_t *checkSum ,uint8_t 
 		else if(t2==5){
 			latitude*=10;
 		}
+
 		latitude=latitude*3;
+
 		latitude+= (atoi(tempData2)*60*30000);
+
 		GPSInformation[7] = latitude>>24;
 		GPSInformation[8] = latitude>>16;
 		GPSInformation[9] = latitude>>8;
