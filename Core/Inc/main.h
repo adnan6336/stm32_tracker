@@ -111,6 +111,8 @@ void Error_Handler(void);
 #define OUTPUT_1_GPIO_Port GPIOC
 #define INPUT_1_Pin GPIO_PIN_7
 #define INPUT_1_GPIO_Port GPIOC
+#define G_CTRL_Pin GPIO_PIN_1
+#define G_CTRL_GPIO_Port GPIOD
 #define Q_CTRL_Pin GPIO_PIN_2
 #define Q_CTRL_GPIO_Port GPIOD
 #define FLASH_CS_Pin GPIO_PIN_3

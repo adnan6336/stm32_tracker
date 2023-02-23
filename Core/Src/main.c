@@ -118,6 +118,7 @@ static const uint16_t crctab16[] = { 0X0000, 0X1189, 0X2312, 0X329B, 0X4624,
 		0X1FF9, 0XF78F, 0XE606, 0XD49D, 0XC514, 0XB1AB, 0XA022, 0X92B9, 0X8330,
 		0X7BC7, 0X6A4E, 0X58D5, 0X495C, 0X3DE3, 0X2C6A, 0X1EF1, 0X0F78, };
 
+
 uint32_t hangCounter = 0;
 uint8_t locationDataIntervalA = 5; //Location packet interval when ignition is on
 uint8_t locationDataIntervalB = 5; //Location packet interval when ignition is off
@@ -267,25 +268,29 @@ int main(void)
   MX_TIM17_Init();
   MX_TIM16_Init();
   MX_TIM14_Init();
+
+
   /* USER CODE BEGIN 2 */
+  HAL_TIM_Base_Start_IT(&htim14);//watchDog Timer
+//
 	HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
 	HAL_UART_Receive_IT(&huart2, GNSS_BUFFER, 1);
 	W25qxx_Init();
 	//INPUT CAPTURE------
 	HAL_TIM_Base_Start_IT(&htim3);
-	HAL_TIM_Base_Start_IT(&htim14);
-	HAL_TIM_Base_Start_IT(&htim16);
-	HAL_TIM_Base_Start_IT(&htim17);
+	HAL_TIM_Base_Start_IT(&htim16);//AT PORT
+	HAL_TIM_Base_Start_IT(&htim17);//GNS PORT
+
 //	W25qxx_EraseSector(0);
 //	W25qxx_EraseSector(1);
 //	HAL_Delay(5000);
+
 	W25qxx_ReadByte(&isFlash, 0);
 	if (isFlash != 1) {
-		HAL_UART_Transmit(&huart4, "first time", sizeof("first time"),
-				100);
+		//First time
 		W25qxx_EraseSector(0);
 		W25qxx_EraseSector(1);
-		W25qxx_WriteByte(1, 0);
+
 		StartN = 0;
 		EndN = 0;
 		StartSec = 1;
@@ -320,13 +325,15 @@ int main(void)
 		W25qxx_WriteByte(locationDataIntervalA, 79);  //locationDataIntervalA = 5
 		W25qxx_WriteByte(locationDataIntervalB, 80);  //locationDataIntervalB = 5
 		W25qxx_WriteByte(0, 81);  //isAutoRst
+		isFlash =1;
+		W25qxx_WriteByte(isFlash, 0);//flashed now
+
 		flashready = 1;
 
 
 
 	} else {
-		HAL_UART_Transmit(&huart4, "reading from rom",
-				sizeof("reading from rom"), 100);
+		//reading from rom
 
 		uint8_t myread[100];
 		memset(myread, 0, sizeof(myread));
@@ -363,7 +370,6 @@ int main(void)
 		if(isAutoRst==0){
 			W25qxx_EraseSector(0);
 			W25qxx_EraseSector(1);
-			W25qxx_WriteByte(1, 0);   //isFlash to 1 , already flashed once
 			StartN = 0;
 			EndN = 0;
 			StartSec = 1;
@@ -392,11 +398,17 @@ int main(void)
 			}
 			W25qxx_WriteByte(locationDataIntervalA, 79);  //locationDataIntervalA = 5
 			W25qxx_WriteByte(locationDataIntervalB, 80);  //locationDataIntervalB = 5
-			W25qxx_WriteByte(0, 81); //isAutoRst = 0
+
+
 		}
+		isAutoRst = 0;
+		W25qxx_WriteByte(isAutoRst, 81); //isAutoRst = 0
+		isFlash = 1;
+		W25qxx_WriteByte(isFlash, 0);   //isFlash to 1 , already flashed once
 		HAL_Delay(100);
 		flashready = 1;
 	}
+
 
 	//-------------------check if tracker has registered any mobile number?-------------
 	isSMSActive=0;
@@ -407,22 +419,32 @@ int main(void)
 		}
 	}
 	//----------------------------------------------------------------------------------
+//	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 0);
+//	HAL_Delay(5000);
+//	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 1);
+//	HAL_Delay(5000);
+//	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 0);
+//	HAL_Delay(10000);
+	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 1);
 
 
 
 	HAL_GPIO_WritePin(PWR_KEY_GPIO_Port, PWR_KEY_Pin, 1);
-	HAL_GPIO_WritePin(Q_CTRL_GPIO_Port, Q_CTRL_Pin, 1);
+//	HAL_GPIO_WritePin(Q_CTRL_GPIO_Port, Q_CTRL_Pin, 1);
 
 	HAL_Delay(1000);
 	HAL_GPIO_WritePin(PWR_KEY_GPIO_Port, PWR_KEY_Pin, 0);
-	HAL_GPIO_WritePin(Q_CTRL_GPIO_Port, Q_CTRL_Pin, 0);
+//	HAL_GPIO_WritePin(Q_CTRL_GPIO_Port, Q_CTRL_Pin, 0);
 
 	HAL_Delay(5000);
 	quectel_init();
 
-	//INPUT CAPTURE------
+//	INPUT CAPTURE------
 	HAL_TIM_IC_Start_DMA(&htim3, TIM_CHANNEL_1, vals, NUMVAL);
-	//-----------------------------------------------------------
+	a=1;
+//	//-----------------------------------------------------------
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -655,7 +677,7 @@ static void MX_TIM14_Init(void)
   htim14.Instance = TIM14;
   htim14.Init.Prescaler = 6400;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim14.Init.Period = 1000-1;
+  htim14.Init.Period = 10000-1;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
@@ -943,7 +965,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(OUTPUT_1_GPIO_Port, OUTPUT_1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, Q_CTRL_Pin|FLASH_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOD, G_CTRL_Pin|Q_CTRL_Pin|FLASH_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : WD_Pin */
   GPIO_InitStruct.Pin = WD_Pin;
@@ -980,8 +1002,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(INPUT_1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Q_CTRL_Pin FLASH_CS_Pin */
-  GPIO_InitStruct.Pin = Q_CTRL_Pin|FLASH_CS_Pin;
+  /*Configure GPIO pins : G_CTRL_Pin Q_CTRL_Pin FLASH_CS_Pin */
+  GPIO_InitStruct.Pin = G_CTRL_Pin|Q_CTRL_Pin|FLASH_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1063,13 +1085,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	if (htim == &htim14) {
-		HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+//		HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
 		HAL_GPIO_TogglePin(WD_GPIO_Port, WD_Pin);
 		hangCounter++;
-		if(hangCounter>100){
-			//if system hangs for more than 10 seconds.
-			NVIC_SystemReset();
-		}
+//		if(hangCounter>100){
+//			//if system hangs for more than 10 seconds.
+//			NVIC_SystemReset();
+//		}
 	}
 	if (htim == &htim16) {
 		// AT PORT TIMER
@@ -1634,6 +1656,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 }
 
 void rebootsystem() {
+	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
 	isAutoRst=1;
 	save_to_flash();
 	NVIC_SystemReset();
