@@ -1085,13 +1085,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	if (htim == &htim14) {
-//		HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
+		HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
 		HAL_GPIO_TogglePin(WD_GPIO_Port, WD_Pin);
 		hangCounter++;
-//		if(hangCounter>100){
-//			//if system hangs for more than 10 seconds.
-//			NVIC_SystemReset();
-//		}
+		if(hangCounter>25){
+			//if system hangs for more than 10 seconds.
+			NVIC_SystemReset();
+		}
 	}
 	if (htim == &htim16) {
 		// AT PORT TIMER
