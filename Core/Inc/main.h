@@ -66,6 +66,7 @@ void quectel_init();
 uint8_t estabilish_tcp();
 void incoming_msg_handler();
 char* substring(char *destination, const char *source, uint8_t beg, uint8_t n);
+void alarm_sender();
 
 
 

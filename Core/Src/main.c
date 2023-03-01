@@ -35,6 +35,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define MAX_INPUT_COUNTS 2 //counts before changing input state.
 #define NMEA_MAX_CHARS 85
 #define NMEA_MAX_LINES 4
 #define TIMCLOCK   64000000
@@ -119,6 +120,16 @@ static const uint16_t crctab16[] = { 0X0000, 0X1189, 0X2312, 0X329B, 0X4624,
 		0X7BC7, 0X6A4E, 0X58D5, 0X495C, 0X3DE3, 0X2C6A, 0X1EF1, 0X0F78, };
 
 
+volatile uint8_t isAlarm = 0;
+volatile uint8_t accInputState = 0;
+volatile uint8_t accInputStatex = 0;
+volatile uint8_t accInputHigh = 0;
+volatile uint8_t accInputLow = 0;
+volatile uint8_t saveAlarm = 0;
+uint8_t TermInfo = 0;
+uint8_t GSMSS =0;
+uint8_t VLvl;
+
 uint32_t hangCounter = 0;
 uint8_t locationDataIntervalA = 5; //Location packet interval when ignition is on
 uint8_t locationDataIntervalB = 5; //Location packet interval when ignition is off
@@ -157,8 +168,8 @@ volatile uint8_t isResponseOk = 0;
 volatile uint8_t recResponse = 0;
 uint8_t imei[8];
 //uint8_t portAdd[MAX_PORT_CHAR] = "12345";
-//uint8_t portAdd[MAX_PORT_CHAR] = "6503";//osama portal
-uint8_t portAdd[MAX_PORT_CHAR] = "9000";//tanzeel portal
+uint8_t portAdd[MAX_PORT_CHAR] = "6503";//osama portal
+//uint8_t portAdd[MAX_PORT_CHAR] = "9000";//tanzeel portal
 uint8_t domainAdd[MAX_DOMAIN_CHAR] = "182.180.188.205";
 //uint8_t domainAdd[] = "\"103.217.177.163\"";
 uint8_t msgcleared = 0;
@@ -174,6 +185,8 @@ uint8_t tim6Count = 0;
 uint16_t infoSNo = 1;
 uint8_t loginPacket[18] = { 0x78, 0x78, 0x0D, 0x01, [16]=0x0D, [17]=0x0 };
 uint8_t dataPacket[36] = { 0x78, 0x78, 0x1F, 0x12, [34]=0xD, [35]=0xA };
+uint8_t alarmPacket[32] = { 0x78, 0x78, 0x1C, 0x16, [30]=0xD, [31]=0xA };
+
 volatile uint8_t savePacket[32];
 uint8_t readPacket[32];
 uint8_t bunchdata[21][32];
@@ -268,8 +281,6 @@ int main(void)
   MX_TIM17_Init();
   MX_TIM16_Init();
   MX_TIM14_Init();
-
-
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim14);//watchDog Timer
 //
@@ -489,6 +500,7 @@ int main(void)
 					HAL_Delay(1000);
 					recTimeA++;
 					where_api_handler();
+					alarm_sender();
 				}
 				//SEND LOCATION VIA SMS
 				//--------------------------------------------------------------------------
@@ -498,7 +510,19 @@ int main(void)
 		}
 		while (isTcpOpen == 1 && isLoggedIn == 1 && isDataMode == 1) {
 			stats = 7;
-			HAL_Delay(locationDataIntervalA*1000);
+			uint8_t tempDelayCounter=0;
+			while(isAlarm == 0){
+				tempDelayCounter++;
+				if(tempDelayCounter>locationDataIntervalA){
+					tempDelayCounter=0;
+					break;
+				}
+				else{
+					HAL_Delay(1000);
+				}
+			}
+			HAL_Delay(1000);
+//			HAL_Delay(locationDataIntervalA*1000);
 			heartBeatTimer++;
 			if (heartBeatTimer > 36) {
 				stats = 8;
@@ -999,7 +1023,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : INPUT_1_Pin */
   GPIO_InitStruct.Pin = INPUT_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(INPUT_1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : G_CTRL_Pin Q_CTRL_Pin FLASH_CS_Pin */
@@ -1085,6 +1109,31 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	if (htim == &htim14) {
+		//watchdog timer
+
+		//check acc input for 2 seconds, and raise flag if its on otherwise off.
+		if(HAL_GPIO_ReadPin(INPUT_1_GPIO_Port, INPUT_1_Pin)){
+			accInputHigh++;
+			accInputLow=0;
+			if(accInputHigh > MAX_INPUT_COUNTS){
+				accInputHigh =0;
+				accInputState = 1;
+				}
+			}
+		else{
+			accInputLow++;
+			accInputHigh=0;
+			if(accInputLow > MAX_INPUT_COUNTS){
+				accInputLow =0;
+				accInputState = 0;
+			}
+		}
+		if(accInputState != accInputStatex){
+			isAlarm = 1;
+			accInputStatex=accInputState;
+		}
+		//---------------------------------------------------------------------------
+
 		HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
 		HAL_GPIO_TogglePin(WD_GPIO_Port, WD_Pin);
 		hangCounter++;
@@ -1835,6 +1884,19 @@ void where_api_handler() {
 		}
 	}
 }
+void alarm_sender(){
+	if(isAlarm){
+		if (isReg == 1) {
+			send_alarm_packet_via_sms();
+			isAlarm = 0;
+		}
+		else{
+			saveAlarm=1;
+			isAlarm=0;
+		}
+
+	}
+}
 
 void clearit() {
 	resTimeout = 3;
@@ -1913,6 +1975,7 @@ void send_data_packet() {
 		for (uint8_t i = 0; i < 18; i++) {
 			dataPacket[i + 4] = readPacket[i];
 		}
+
 		dataPacket[30] = infoSNo >> 8;
 		dataPacket[31] = infoSNo;
 		uint8_t tempCrcData[30];
@@ -1931,24 +1994,50 @@ void send_data_packet() {
 		HAL_Delay(1000);
 	}
 	if (read_data_packet() == 0) {
-		for (uint8_t i = 0; i < 18; i++) {
-			dataPacket[i + 4] = gps_info[i];
-		}
-		dataPacket[30] = infoSNo >> 8;
-		dataPacket[31] = infoSNo;
-		uint8_t tempCrcData[30];
-		for (uint8_t i = 0; i < 29; i++) {
-			tempCrcData[i] = dataPacket[i + 2];
-		}
-		uint8_t *tempPtr = tempCrcData;
-		uint16_t crcResult = 0;
-		crcResult = GetCrc16(tempPtr,
-				sizeof(tempCrcData) / sizeof(tempCrcData[0]));
-		dataPacket[32] = crcResult >> 8;
-		dataPacket[33] = crcResult;
-		HAL_UART_Transmit(&AT_PORT, dataPacket, 36, 100);
+		if(isAlarm){
+			isAlarm=0;
+			for (uint8_t i = 0; i < 18; i++) {
+				alarmPacket[i + 4] = gps_info[i];
+			}
+			create_status_info();
+			alarmPacket[22]=TermInfo;
+			alarmPacket[23]=VLvl;
+			alarmPacket[24]=GSMSS;
+			alarmPacket[26] = infoSNo >> 8;
+			alarmPacket[27] = infoSNo;
+			uint8_t tempCrcData[30];
+			for (uint8_t i = 0; i < 26; i++) {
+				tempCrcData[i] = alarmPacket[i + 2];
+			}
+			uint8_t *tempPtr = tempCrcData;
+			uint16_t crcResult = 0;
+			crcResult = GetCrc16(tempPtr,
+					sizeof(tempCrcData) / sizeof(tempCrcData[0]));
+			alarmPacket[28] = crcResult >> 8;
+			alarmPacket[29] = crcResult;
+			HAL_UART_Transmit(&AT_PORT, alarmPacket, 29, 100);
+		}else{
+			for (uint8_t i = 0; i < 18; i++) {
+				dataPacket[i + 4] = gps_info[i];
+			}
+			dataPacket[30] = infoSNo >> 8;
+			dataPacket[31] = infoSNo;
+			uint8_t tempCrcData[30];
+			for (uint8_t i = 0; i < 29; i++) {
+				tempCrcData[i] = dataPacket[i + 2];
+			}
+			uint8_t *tempPtr = tempCrcData;
+			uint16_t crcResult = 0;
+			crcResult = GetCrc16(tempPtr,
+					sizeof(tempCrcData) / sizeof(tempCrcData[0]));
+			dataPacket[32] = crcResult >> 8;
+			dataPacket[33] = crcResult;
+			HAL_UART_Transmit(&AT_PORT, dataPacket, 36, 100);
 
-		// HAL_UART_Transmit(&huart4, dataPacket, 36, 100);
+			// HAL_UART_Transmit(&huart4, dataPacket, 36, 100);
+
+		}
+
 
 	}
 }
@@ -1971,6 +2060,11 @@ uint8_t checkdatasize() {
 }
 
 void save_data_packet() {
+
+	if(saveAlarm){
+		saveAlarm=0;
+		//todo save packet
+	}
 	memset(savePacket, 0, sizeof(savePacket));
 	for (uint8_t i = 0; i < 18; i++) {
 		savePacket[i] = gps_info[i];
@@ -2022,88 +2116,91 @@ uint8_t read_data_packet() {
 	}
 }
 
+
+void create_status_info(){
+
+	uint8_t SigStre = 20;
+	int voltage = 4400;
+	//if relay is cut
+	if (0) {
+		TermInfo = TermInfo | 0x80;
+	}
+	//if gps tracking is on
+
+	if (1) {
+		TermInfo = TermInfo | 0x40;
+	}
+	//if SOS is on
+
+	if (1) {
+		TermInfo = TermInfo | 0x20;
+	}
+	//if Low batt alarm is on
+
+	if (1) {
+		TermInfo = TermInfo | 0x18;
+	}
+	//if Power Cut alarm is on
+
+	if (1) {
+		TermInfo = TermInfo | 0x10;
+	}
+	//if shock alarm is on
+	if (1) {
+		TermInfo = TermInfo | 0x8;
+	}
+	// 000 means normal
+	//if charge is on
+	if (1) {
+		TermInfo = TermInfo | 0x4;
+	}
+	//if ACC is on
+	if (accInputState) {
+		TermInfo = TermInfo | 0x2;
+	}
+	//if Activated
+	if (1) {
+		TermInfo = TermInfo | 0x1;
+	}
+	if (voltage > 4400) {
+		VLvl = 6;
+	} else if (voltage > 4100) {
+		VLvl = 5;
+
+	} else if (voltage > 4000) {
+		VLvl = 4;
+
+	} else if (voltage > 3900) {
+		VLvl = 3;
+
+	} else if (voltage > 3800) {
+		VLvl = 2;
+
+	} else if (voltage > 3700) {
+		VLvl = 1;
+
+	} else {
+		VLvl = 0;
+
+	}
+	if (SigStre > 19) {
+		GSMSS = 4;
+	} else if (SigStre > 14) {
+		GSMSS = 3;
+	} else if (SigStre > 9) {
+		GSMSS = 2;
+	} else if (SigStre > 1) {
+		GSMSS = 1;
+	} else {
+		GSMSS = 0;
+	}
+
+}
+
 void send_hb_packet() {
 	if (isTcpOpen == 1 && isDataMode == 1) {
-		uint8_t TermInfo = 0;
-		uint8_t VLvl;
-		uint8_t SigStre = 20;
-		uint8_t GSMSS;
 
-		int voltage = 4400;
-		//if relay is cut
-		if (0) {
-			TermInfo = TermInfo | 0x80;
-		}
-		//if gps tracking is on
-
-		if (1) {
-			TermInfo = TermInfo | 0x40;
-		}
-		//if SOS is on
-
-		if (1) {
-			TermInfo = TermInfo | 0x20;
-		}
-		//if Low batt alarm is on
-
-		if (1) {
-			TermInfo = TermInfo | 0x18;
-		}
-		//if Power Cut alarm is on
-
-		if (1) {
-			TermInfo = TermInfo | 0x10;
-		}
-		//if shock alarm is on
-		if (1) {
-			TermInfo = TermInfo | 0x8;
-		}
-		// 000 means normal
-		//if charge is on
-		if (1) {
-			TermInfo = TermInfo | 0x4;
-		}
-		//if ACC is on
-		if (1) {
-			TermInfo = TermInfo | 0x2;
-		}
-		//if Activated
-		if (1) {
-			TermInfo = TermInfo | 0x1;
-		}
-		if (voltage > 4400) {
-			VLvl = 6;
-		} else if (voltage > 4100) {
-			VLvl = 5;
-
-		} else if (voltage > 4000) {
-			VLvl = 4;
-
-		} else if (voltage > 3900) {
-			VLvl = 3;
-
-		} else if (voltage > 3800) {
-			VLvl = 2;
-
-		} else if (voltage > 3700) {
-			VLvl = 1;
-
-		} else {
-			VLvl = 0;
-
-		}
-		if (SigStre > 19) {
-			GSMSS = 4;
-		} else if (SigStre > 14) {
-			GSMSS = 3;
-		} else if (SigStre > 9) {
-			GSMSS = 2;
-		} else if (SigStre > 1) {
-			GSMSS = 1;
-		} else {
-			GSMSS = 0;
-		}
-
+		create_status_info();
 		heartbeatPacket[4] = TermInfo;
 		heartbeatPacket[5] = VLvl;
 		heartbeatPacket[6] = GSMSS;
@@ -2231,6 +2328,39 @@ void send_current_location_via_sms() {
 		//    send_command(tecMsg, 12005, 7, 0, 0);
 	}
 }
+
+
+void send_alarm_packet_via_sms(){
+	if(isSMSActive==1){
+		uint8_t tempalarm[23];
+		memset(tempalarm, 0, sizeof(tempalarm));
+		create_status_info();
+		char temMsg[100];
+		uint8_t n = 21;
+		uint8_t tempCt = 0;
+		memset(temMsg, 0, sizeof(temMsg));
+		strcat(temMsg,"AT+CMGS=\"");
+		strcat(temMsg,validSender);
+		strcat(temMsg,"\"\r");
+		create_status_info();
+		for (uint8_t y = 0; y < 18; y++) {
+			tempalarm[y]  = gps_info[y];
+		}
+		tempalarm[18]=TermInfo;
+		tempalarm[19]=VLvl;
+		tempalarm[20]=GSMSS;
+		for (uint8_t y = 0; y < 21; y++) {
+			n += sprintf(&temMsg[n], "%d", tempalarm[y]);
+		}
+		tempCt = 0;
+		while (temMsg[tempCt] != NULL) {
+			tempCt++;
+		}
+		temMsg[tempCt] = 26;
+		send_command(temMsg, 12005, 7, 0, 0);
+	}
+}
+
 void send_location_packet_via_sms(){
 	if(isSMSActive==1){
 		msgCounter = 0;
