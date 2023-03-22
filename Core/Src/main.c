@@ -39,7 +39,7 @@
 #define NMEA_MAX_CHARS 85
 #define NMEA_MAX_LINES 4
 #define TIMCLOCK   64000000
-#define PRESCALAR  640
+#define PRESCALAR  64000
 #define NUMVAL 2
 #define MAX_COMMAND_LEN 50 //maximum command
 #define rTime 180
@@ -53,7 +53,7 @@
 #define AT_PORT huart1
 #define RESPONSE_MAX_LINE 6
 #define RESPONSE_MAX_CHAR 50
-#define De 1
+//#define De 1
 #define MAX_DOMAIN_CHAR 51 //max is 50
 #define MAX_PORT_CHAR 6 //max is 5
 
@@ -69,10 +69,9 @@
 SPI_HandleTypeDef hspi1;
 
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim14;
-TIM_HandleTypeDef htim16;
 TIM_HandleTypeDef htim17;
-DMA_HandleTypeDef hdma_tim3_ch1;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -81,12 +80,16 @@ UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
 //--------------INPUT CAPTURE RING-------------------
-uint16_t Difference = 0;
+volatile uint16_t Difference = 0;
 int Is_First_Captured = 0;
 float frequency = 0;
 uint16_t usWidth = 0;
 uint8_t gotIndication = 0;
-uint16_t vals[NUMVAL];
+volatile static uint16_t vals[NUMVAL];
+uint8_t isReloaded = 0;
+volatile lastValueIC = 0;
+volatile currentValueIC = 0;
+volatile uint16_t diff = 0;
 //--------------INPUT CAPTURE RING-------------------
 
 static const uint16_t crctab16[] = { 0X0000, 0X1189, 0X2312, 0X329B, 0X4624,
@@ -168,8 +171,8 @@ volatile uint8_t isResponseOk = 0;
 volatile uint8_t recResponse = 0;
 uint8_t imei[8];
 //uint8_t portAdd[MAX_PORT_CHAR] = "12345";
-uint8_t portAdd[MAX_PORT_CHAR] = "6503";//osama portal
-//uint8_t portAdd[MAX_PORT_CHAR] = "9000";//tanzeel portal
+//uint8_t portAdd[MAX_PORT_CHAR] = "6503";//osa/ma portal
+uint8_t portAdd[MAX_PORT_CHAR] = "9000";///tanzeel portal
 uint8_t domainAdd[MAX_DOMAIN_CHAR] = "182.180.188.205";
 //uint8_t domainAdd[] = "\"103.217.177.163\"";
 uint8_t msgcleared = 0;
@@ -203,7 +206,6 @@ uint8_t stats = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
@@ -211,8 +213,8 @@ static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USART4_UART_Init(void);
 static void MX_TIM17_Init(void);
-static void MX_TIM16_Init(void);
 static void MX_TIM14_Init(void);
+static void MX_TIM6_Init(void);
 /* USER CODE BEGIN PFP */
 
 //char* int2string(int num, char *str);
@@ -239,7 +241,7 @@ static void MX_TIM14_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-uint8_t a = 0;
+uint8_t ab = 0;
 
 /* USER CODE END 0 */
 
@@ -271,7 +273,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_SPI1_Init();
   MX_TIM3_Init();
   MX_USART1_UART_Init();
@@ -279,21 +280,25 @@ int main(void)
   MX_USART3_UART_Init();
   MX_USART4_UART_Init();
   MX_TIM17_Init();
-  MX_TIM16_Init();
   MX_TIM14_Init();
+  MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim14);//watchDog Timer
-//
-	HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
-	HAL_UART_Receive_IT(&huart2, GNSS_BUFFER, 1);
-	W25qxx_Init();
+  HAL_TIM_Base_Start_IT(&htim6);//AT PORT
+  HAL_UART_Receive_IT(&huart2, GNSS_BUFFER, 1);
+  W25qxx_Init();
 	//INPUT CAPTURE------
-	HAL_TIM_Base_Start_IT(&htim3);
-	HAL_TIM_Base_Start_IT(&htim16);//AT PORT
-	HAL_TIM_Base_Start_IT(&htim17);//GNS PORT
+  HAL_TIM_Base_Start_IT(&htim3);//input capture timer starts
+  HAL_TIM_Base_Start_IT(&htim17);///GNS PORT
+  HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
 
-//	W25qxx_EraseSector(0);
-//	W25qxx_EraseSector(1);
+
+	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
+	HAL_Delay(1000);
+	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 0);
+
+	W25qxx_EraseSector(0);
+	W25qxx_EraseSector(1);
 //	HAL_Delay(5000);
 
 	W25qxx_ReadByte(&isFlash, 0);
@@ -430,29 +435,20 @@ int main(void)
 		}
 	}
 	//----------------------------------------------------------------------------------
-//	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 0);
-//	HAL_Delay(5000);
-//	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 1);
-//	HAL_Delay(5000);
-//	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 0);
-//	HAL_Delay(10000);
-	HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, 1);
-
 
 
 	HAL_GPIO_WritePin(PWR_KEY_GPIO_Port, PWR_KEY_Pin, 1);
-//	HAL_GPIO_WritePin(Q_CTRL_GPIO_Port, Q_CTRL_Pin, 1);
-
 	HAL_Delay(1000);
 	HAL_GPIO_WritePin(PWR_KEY_GPIO_Port, PWR_KEY_Pin, 0);
-//	HAL_GPIO_WritePin(Q_CTRL_GPIO_Port, Q_CTRL_Pin, 0);
+
 
 	HAL_Delay(5000);
 	quectel_init();
 
 //	INPUT CAPTURE------
-	HAL_TIM_IC_Start_DMA(&htim3, TIM_CHANNEL_1, vals, NUMVAL);
-	a=1;
+	HAL_TIM_IC_Start_IT(&htim3, TIM_CHANNEL_1);
+//	HAL_TIM_IC_Start_DMA(&htim3, TIM_CHANNEL_1, vals, NUMVAL);
+	ab=1;
 //	//-----------------------------------------------------------
 
 
@@ -647,6 +643,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 0 */
 
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_IC_InitTypeDef sConfigIC = {0};
 
@@ -654,11 +651,20 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 640;
+  htim3.Init.Prescaler = 64000;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
+  htim3.Init.Period = 1000;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   if (HAL_TIM_IC_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
@@ -680,6 +686,44 @@ static void MX_TIM3_Init(void)
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * @brief TIM6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM6_Init(void)
+{
+
+  /* USER CODE BEGIN TIM6_Init 0 */
+
+  /* USER CODE END TIM6_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM6_Init 1 */
+
+  /* USER CODE END TIM6_Init 1 */
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 6400;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = 1000-1;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM6_Init 2 */
+
+  /* USER CODE END TIM6_Init 2 */
 
 }
 
@@ -711,38 +755,6 @@ static void MX_TIM14_Init(void)
   /* USER CODE BEGIN TIM14_Init 2 */
 
   /* USER CODE END TIM14_Init 2 */
-
-}
-
-/**
-  * @brief TIM16 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM16_Init(void)
-{
-
-  /* USER CODE BEGIN TIM16_Init 0 */
-
-  /* USER CODE END TIM16_Init 0 */
-
-  /* USER CODE BEGIN TIM16_Init 1 */
-
-  /* USER CODE END TIM16_Init 1 */
-  htim16.Instance = TIM16;
-  htim16.Init.Prescaler = 6400;
-  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim16.Init.Period = 1000-1;
-  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim16.Init.RepetitionCounter = 0;
-  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM16_Init 2 */
-
-  /* USER CODE END TIM16_Init 2 */
 
 }
 
@@ -947,22 +959,6 @@ static void MX_USART4_UART_Init(void)
 }
 
 /**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 3, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-
-}
-
-/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -982,14 +978,14 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(WD_GPIO_Port, WD_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, CTS_Pin|DCD_Pin|LED_1_Pin|LED_2_Pin
+  HAL_GPIO_WritePin(GPIOB, OUTPUT_1_Pin|LED_2_Pin|DCD_Pin|LED_1_Pin
                           |PWR_KEY_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(OUTPUT_1_GPIO_Port, OUTPUT_1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(G_CTRL_GPIO_Port, G_CTRL_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, G_CTRL_Pin|Q_CTRL_Pin|FLASH_CS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOD, Q_CTRL_Pin|FLASH_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : WD_Pin */
   GPIO_InitStruct.Pin = WD_Pin;
@@ -998,27 +994,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(WD_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RTS_Pin DTR_Pin */
-  GPIO_InitStruct.Pin = RTS_Pin|DTR_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : CTS_Pin DCD_Pin LED_1_Pin LED_2_Pin
+  /*Configure GPIO pins : OUTPUT_1_Pin LED_2_Pin DCD_Pin LED_1_Pin
                            PWR_KEY_Pin */
-  GPIO_InitStruct.Pin = CTS_Pin|DCD_Pin|LED_1_Pin|LED_2_Pin
+  GPIO_InitStruct.Pin = OUTPUT_1_Pin|LED_2_Pin|DCD_Pin|LED_1_Pin
                           |PWR_KEY_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : OUTPUT_1_Pin */
-  GPIO_InitStruct.Pin = OUTPUT_1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  /*Configure GPIO pin : DTR_Pin */
+  GPIO_InitStruct.Pin = DTR_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(OUTPUT_1_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(DTR_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : INPUT_1_Pin */
   GPIO_InitStruct.Pin = INPUT_1_Pin;
@@ -1039,12 +1028,16 @@ static void MX_GPIO_Init(void)
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
 	if (huart->Instance == USART2) {
-		MX_USART2_UART_Init();
-		HAL_UART_Receive_IT(&GNSS_PORT, GNSS_BUFFER, 1);
+		if(huart->ErrorCode != HAL_UART_ERROR_NONE){
+			MX_USART2_UART_Init();
+			HAL_UART_Receive_IT(&GNSS_PORT, GNSS_BUFFER, 1);
+		}
 	}
 	if (huart->Instance == USART1) {
-		MX_USART1_UART_Init();
-		HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
+		if(huart->ErrorCode != HAL_UART_ERROR_NONE){
+			MX_USART1_UART_Init();
+			HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
+		}
 	}
 }
 
@@ -1082,8 +1075,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 		recResponse = 1;
 		if (isStart == 0) {
 			isStart = 1;
-			FIX_TIMER_TRIGGER(&htim16);
-			HAL_TIM_Base_Start_IT(&htim16);
+			FIX_TIMER_TRIGGER(&htim6);
+			HAL_TIM_Base_Start_IT(&htim6);
 		}
 		TIM16->CNT &= 0x0;
 		HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
@@ -1134,15 +1127,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		}
 		//---------------------------------------------------------------------------
 
-		HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
 		HAL_GPIO_TogglePin(WD_GPIO_Port, WD_Pin);
 		hangCounter++;
 		if(hangCounter>25){
 			//if system hangs for more than 10 seconds.
-			NVIC_SystemReset();
+//			NVIC_SystemReset();
 		}
 	}
-	if (htim == &htim16) {
+	if (htim == &htim6) {
+//		HAL_GPIO_TogglePin(LED_2_GPIO_Port, LED_2_Pin);
+//		HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
 		// AT PORT TIMER
 		char tResponse = '0';
 		//todo
@@ -1173,7 +1167,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 					}
 				}
 			}
-			HAL_TIM_Base_Stop_IT(&htim16);
+			HAL_TIM_Base_Stop_IT(&htim6);
 			memset(responseBuffer, 0, sizeof(responseBuffer));
 			lineCount = 0;
 			charCount = 0;
@@ -1352,7 +1346,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 					break;
 				}
 			}
-			HAL_TIM_Base_Stop_IT(&htim16);
+			HAL_TIM_Base_Stop_IT(&htim6);
 			memset(responseBuffer, 0, sizeof(responseBuffer));
 			lineCount = 0;
 			charCount = 0;
@@ -1649,7 +1643,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 		}
 
-	} else if (htim == &htim17) {
+	}
+	else if(htim == &htim3){
+		isReloaded ++;
+		//---------input capture timer.
+
+	}
+
+
+	else if (htim == &htim17) {
 
 		//---------------------GNSS Timer-------------------------------------
 		hangCounter = 0;
@@ -1705,7 +1707,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 }
 
 void rebootsystem() {
-	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
+//	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
 	isAutoRst=1;
 	save_to_flash();
 	NVIC_SystemReset();
@@ -1776,9 +1778,10 @@ void send_command(char *command, uint16_t timeout, uint8_t caseId,
 		isStart = 1;
 		recResponse = 0;
 		HAL_UART_Transmit(&AT_PORT, command, commandSize, 1000);
-		FIX_TIMER_TRIGGER(&htim16);
-		HAL_TIM_Base_Start_IT(&htim16);
+		FIX_TIMER_TRIGGER(&htim6);
+		HAL_TIM_Base_Start_IT(&htim6);
 		resTimeout = timeout; //300 ms
+		ab=5;
 		while (isBusy)
 			;
 		commandCase = 0;
@@ -1800,18 +1803,26 @@ void send_command(char *command, uint16_t timeout, uint8_t caseId,
 void quectel_init() {
 	// printf("--Sending AT-- \n");
 	send_command("AT\r\n", 3, 1, 1, 1);
+	ab = 2;
+
 	// printf("--sending AT+QIURC=1--\n");
 	// send_command("AT+QIURC=1\r\n", 3, 1, 1,1);
 	// printf("--Sending AT+CPIN-- \n");
 	send_command("AT+CPIN?\r\n", 51, 2, 2, 1);
+	ab = 3;
+
 	// printf("--Sending AT+CREG?-- \n");
 	// send_command("AT+CREG?\r\n",3,3,5,1);
 	// printf("--Sending AT+CGREG?-- \n");
 	// send_command("AT+CGREG?\r\n",3,3,3,1);
 	// printf("--Sending AT+CMGF=1-- \n");
 	send_command("AT+CMGF=1\r\n", 3, 1, 3, 1);
+	ab = 4;
+
 	// printf("--Sending AT+CNMI=2,2-- \n");
 	send_command("AT+CNMI=2,2\r\n", 3, 1, 3, 1);
+	ab = 5;
+
 	// printf("--Sending AT+CGSN--\r\n \n");
 	send_command("AT+CGSN\r\n", 3, 4, 2, 1);
 	send_command("AT+QMGDA=\"DEL ALL\"\r\n", 50, 1, 0, 0);
@@ -1900,7 +1911,7 @@ void alarm_sender(){
 
 void clearit() {
 	resTimeout = 3;
-	HAL_TIM_Base_Stop_IT(&htim16);
+	HAL_TIM_Base_Stop_IT(&htim6);
 	memset(responseBuffer, 0, sizeof(responseBuffer));
 	lineCount = 0;
 	charCount = 0;
@@ -2226,25 +2237,58 @@ void send_hb_packet() {
 }
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-	if (isDataMode == 1) {
-		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) { // if the interrupt source is channel1
-			uint16_t IC_Val1, IC_Val2;
-			IC_Val1 = vals[0];
-			IC_Val2 = vals[1];
-			if (IC_Val2 > IC_Val1) {
-				Difference = IC_Val2 - IC_Val1;
-			} else if (IC_Val1 > IC_Val2) {
-				Difference = (0xffff - IC_Val1) + IC_Val2;
+
+	if(isDataMode == 1){
+		if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1){
+			currentValueIC = TIM3->CNT;
+
+			if(currentValueIC>lastValueIC){
+				diff = currentValueIC - lastValueIC;
 			}
-			float refClock = TIMCLOCK / (PRESCALAR);
-			float mFactor = 1000 / refClock;
-			usWidth = Difference * mFactor;
-			if (usWidth > 100 && usWidth < 200) {
-				//printf("Got message indication\n");
+			else if(currentValueIC < lastValueIC)
+			{
+				diff = (1000 - lastValueIC) + currentValueIC;
+			}
+			if(diff > 100 && diff < 145){
 				isPulse = 1;
 			}
+			lastValueIC = currentValueIC;
 		}
 	}
+
+//	if (1 == 1) {
+//		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) { // if the interrupt source is channel1
+//			uint16_t IC_Val1, IC_Val2;
+//			IC_Val2 = vals[0];
+//			IC_Val1 = vals[1];
+//			if (IC_Val2 > IC_Val1) {
+//				Difference = IC_Val2 - IC_Val1;
+//			}
+//			else if (IC_Val1 > IC_Val2) {
+//				Difference = (10000 - IC_Val1) + IC_Val2;
+//			}
+//			usWidth = Difference;
+//			if (usWidth > 100 && usWidth < 200) {
+//				//printf("Got message indication\n");
+//				isPulse = 1;
+//			}
+//			//			uint16_t IC_Val1, IC_Val2;
+////			IC_Val1 = vals[0];
+////			IC_Val2 = vals[1];
+////			if (IC_Val2 > IC_Val1) {
+////				Difference = IC_Val2 - IC_Val1;
+////			} else if (IC_Val1 > IC_Val2) {
+////				Difference = (0xffff - IC_Val1) + IC_Val2;
+////			}
+////			float refClock = TIMCLOCK / (PRESCALAR);
+////			float mFactor = 1000 / refClock;
+////			usWidth = Difference * mFactor;
+////			if (usWidth > 100 && usWidth < 200) {
+////				//printf("Got message indication\n");
+////				isPulse = 1;
+////			}
+//		}
+//	}
 }
 
 char* substring(char *destination, const char *source, uint8_t beg, uint8_t n) {
