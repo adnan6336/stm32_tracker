@@ -77,6 +77,9 @@
 #define CP3_ADD 11
 #define CP4_ADD 12
 #define AUTORST_ADD 81
+#define SMSACTIVE_ADD 82
+#define RELAYSTATE_ADD 83
+
 //uint8_t a=0;
 /* USER CODE END PD */
 
@@ -100,6 +103,7 @@ UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
 //--------------INPUT CAPTURE RING-------------------
+
 volatile uint16_t Difference = 0;
 int Is_First_Captured = 0;
 float frequency = 0;
@@ -142,6 +146,11 @@ static const uint16_t crctab16[] = { 0X0000, 0X1189, 0X2312, 0X329B, 0X4624,
 		0X1FF9, 0XF78F, 0XE606, 0XD49D, 0XC514, 0XB1AB, 0XA022, 0X92B9, 0X8330,
 		0X7BC7, 0X6A4E, 0X58D5, 0X495C, 0X3DE3, 0X2C6A, 0X1EF1, 0X0F78, };
 
+
+
+uint8_t isGpsValid = 0;
+uint8_t gpsSpeed = 0;
+uint8_t relayState = 0; //CAR IS ON
 
 volatile uint8_t isAlarm = 0;
 volatile uint8_t accInputState = 0;
@@ -368,6 +377,8 @@ int main(void)
 		locationDataIntervalA = configPage[LDIA_ADD];
 		locationDataIntervalB = configPage[LDIB_ADD];
 		isAutoRst = configPage[AUTORST_ADD];
+		isSMSActive = configPage[SMSACTIVE_ADD];
+		relayState = configPage[RELAYSTATE_ADD];
 		if(isAutoRst==0){
 			StartN = 0;
 			EndN = 0;
@@ -383,15 +394,23 @@ int main(void)
 
 
 	//-------------------check if tracker has registered any mobile number?-------------
-	isSMSActive=0;
-	for(uint8_t a=0;a<6;a++){
-		if(validSender[a]!=0){
-			isSMSActive=1;
-			break;
-		}
+	if(validSender[0] == 0 && validSender[1] == 0 && validSender[2] == 0){
+		isSMSActive=0;
 	}
 	//----------------------------------------------------------------------------------
 
+
+	//-----------------------set car state--------------------------------
+	if(relayState == 1){
+		//switch off the car
+		HAL_GPIO_WritePin(OUTPUT_1_GPIO_Port, OUTPUT_1_Pin, 1);
+	}
+	else{
+		//switch on the car
+		HAL_GPIO_WritePin(OUTPUT_1_GPIO_Port, OUTPUT_1_Pin, 0);
+	}
+
+	//---------------------------------------------------------------------
 
 	HAL_GPIO_WritePin(PWR_KEY_GPIO_Port, PWR_KEY_Pin, 1);
 	HAL_Delay(1000);
@@ -1158,6 +1177,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 					uint8_t ind2; //command length.
 					char *x;
 					char sCommand[MAX_COMMAND_LEN];
+					memset(sCommand,0,sizeof(sCommand));//new line added
 					x = strchr(responseBuffer[tLine + 1], '*');
 					if (x != NULL) {
 						char *y;
@@ -1267,7 +1287,27 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 								//TIMER CONFIG COMMAND RECEIVED
 								check_command_TIMER(sCommand);///handle the TIMER CONFIG COMMAND
 
+							} else if (sCommand[0] == 'M'
+									&& sCommand[1] == 'S'
+									&& sCommand[2] == 'G'
+									&& sCommand[3] == 'C'
+									&& sCommand[4] == 'F'
+									&& sCommand[5] == 'G'
+									&& sCommand[6] == ','
+									&& isOwner == 1) {
+								//MSGCFG CONFIG COMMAND RECEIVED
+								check_command_MSGCFG(sCommand);///handle the TIMER CONFIG COMMAND
+							} else if (sCommand[0] == 'R'
+									&& sCommand[1] == 'E'
+									&& sCommand[2] == 'L'
+									&& sCommand[3] == 'A'
+									&& sCommand[4] == 'Y'
+									&& sCommand[5] == ','
+									&& isOwner == 1) {
+								//TIMER CONFIG COMMAND RECEIVED
+								check_command_RELAY(sCommand);///handle the TIMER CONFIG COMMAND
 							}
+
 						}
 
 					}
@@ -1638,9 +1678,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		tempGps = nmea_parser(nmeaResponse, NMEA_MAX_CHARS,&crcc,&rCrc);
 		if (tempGps != NULL) {
 			gps_info = tempGps;
+			uint8_t vc = 0;
+			vc=gps_info[16];
+			gpsSpeed = gps_info[15];
+			vc&=0x10;
+			vc = vc<<3;
+			if(vc == 0x80){
+				isGpsValid = 1;
+			}
+			else{
+				isGpsValid = 0;
+			}
 		}
 		else{
+			isGpsValid = 0;
 //			HAL_UART_Transmit(&huart4, "WRONG", 5, 100);
+
 		}
 		HAL_TIM_Base_Stop_IT(&htim17);
 		isGNSSTimStart = 0;
@@ -1726,6 +1779,8 @@ void save_to_flash(uint8_t autoRstValue) {
 	configPage[LDIB_ADD] = locationDataIntervalB;  //locationDataIntervalB = 5
 	isAutoRst = autoRstValue;
 	configPage[AUTORST_ADD] = isAutoRst; //isAutorst
+	configPage[SMSACTIVE_ADD] = isSMSActive;
+	configPage[RELAYSTATE_ADD] = relayState;
 	isFlash1 = 1;
 	configPage[LASTPAGE_ADD] = isFlash1; //isflash1
 	W25qxx_WritePage(configPage, 0, 0, LASTPAGE_ADD+2);
@@ -2475,6 +2530,22 @@ void check_command_SERVER(char* command){
 //		        printf("Data is bad");
 		    }
 }
+void check_command_RELAY(char* sCommand){
+	if(sCommand[6]=='1'){
+		if(isGpsValid == 1 && gpsSpeed < 20){
+			//SWITCH OFF THE CAR
+			HAL_GPIO_WritePin(OUTPUT_1_GPIO_Port, OUTPUT_1_Pin, 1);
+			relayState = 1;
+			save_to_flash(0);
+		}
+	}
+	else if(sCommand[6] == '0'){
+		//SWITCH ON THE CAR
+		HAL_GPIO_WritePin(OUTPUT_1_GPIO_Port, OUTPUT_1_Pin, 0);
+		relayState = 0;
+		save_to_flash(0);
+	}
+}
 void check_command_TIMER(char* command){
     char t1[4],t2[4];
 //    uint8_t timer1=5,timer2=5;
@@ -2514,6 +2585,9 @@ void check_command_TIMER(char* command){
 	        if(command[a]!=NULL){
 	            t2[a-(commaPosition[1]+1)] = command[a];
 	        }
+	        else{
+	        	break;
+	        }
 	    }
 	    locationDataIntervalA = atoi(t1);
 	    locationDataIntervalB = atoi(t2);
@@ -2527,8 +2601,66 @@ void check_command_TIMER(char* command){
     else{
 //		        printf("Data is bad");
     }
-
 }
+
+void check_command_MSGCFG(char* command){
+    char t1[4],t2[4];
+    uint8_t cfgCode = 0;
+    //check for data integrity by counting commas.
+    //there must be 2 commas in total.
+    //t1 and t2 both must not be greater than 3 chars.
+
+    uint8_t commaPosition[2]={0,0};
+    uint8_t totalCommas=0;
+    for (uint8_t a=0;a<MAX_COMMAND_LEN;a++){
+        if(command[a]==','){
+            if(totalCommas<2){
+                commaPosition[totalCommas]=a;
+            }
+            totalCommas++;
+        }
+    }
+    uint8_t comaDiff = 0;
+    comaDiff = commaPosition[1] - commaPosition[0];
+    if(totalCommas ==2
+    && commaPosition[0] == 6
+    && comaDiff == 2){
+        //two commas found, and first one is on 6th index.
+        //t1 has 1 char
+        //data is good.
+    	memset(t1,0,sizeof(t1));
+    	memset(t2,0,sizeof(t2));
+
+        //extract t1
+         t1[0]=command[commaPosition[0]+1];
+        //extract t2
+	    for(uint8_t a=commaPosition[1]+1;a<commaPosition[1]+4;a++){
+	        if(command[a]!=NULL){
+	            t2[a-(commaPosition[1]+1)] = command[a];
+	        }
+	        else{
+	        	break;
+	        }
+	    }
+	    cfgCode = atoi(t1);
+	    /*cfgCode:
+	    	1 = TURN ON/OFF SENDING LOCATION PACKETS
+	    */
+	    if(cfgCode == 1){
+	    	uint8_t state = atoi(t2);
+	    	if(state == 0){
+	    		isSMSActive = 0;
+	    	}
+	    	else if(state == 1){
+	    		isSMSActive = 1;
+	    	}
+	    }
+    }
+    else{
+//		        printf("Data is bad");
+    }
+}
+
 /* USER CODE END 4 */
 
 /**

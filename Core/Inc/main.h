@@ -70,6 +70,8 @@ void alarm_sender();
 void save_to_flash(uint8_t autoRstValue);
 void check_command_SERVER(char* command);
 void check_command_TIMER(char* command);
+void check_command_MSGCFG(char* command);
+void check_command_RELAY(char* sCommand);
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
