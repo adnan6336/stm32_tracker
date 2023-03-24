@@ -67,9 +67,7 @@ uint8_t estabilish_tcp();
 void incoming_msg_handler();
 char* substring(char *destination, const char *source, uint8_t beg, uint8_t n);
 void alarm_sender();
-
-
-
+void save_to_flash(uint8_t autoRstValue);
 void check_command_SERVER(char* command);
 void check_command_TIMER(char* command);
 /* USER CODE END EM */

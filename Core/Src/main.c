@@ -53,10 +53,30 @@
 #define AT_PORT huart1
 #define RESPONSE_MAX_LINE 6
 #define RESPONSE_MAX_CHAR 50
-//#define De 1
 #define MAX_DOMAIN_CHAR 51 //max is 50
 #define MAX_PORT_CHAR 6 //max is 5
-
+#define LASTPAGE_ADD 250
+#define PORTSTART_ADD 73
+#define PORTEND_ADD 78
+#define DOMAINSTART_ADD 23
+#define DOMAINEND_ADD 72
+#define VALIDSENSTART_ADD 13
+#define VALIDSENEND_ADD 22
+#define LDIA_ADD 79 //location data interval A
+#define LDIB_ADD 80 //location data interval B
+#define MSBSS 1
+#define LSBSS 2
+#define MSBSN 3
+#define LSBSN 4
+#define MSBES 5
+#define LSBES 6
+#define MSBEN 7
+#define LSBEN 8
+#define CP1_ADD 9
+#define CP2_ADD 10
+#define CP3_ADD 11
+#define CP4_ADD 12
+#define AUTORST_ADD 81
 //uint8_t a=0;
 /* USER CODE END PD */
 
@@ -87,8 +107,8 @@ uint16_t usWidth = 0;
 uint8_t gotIndication = 0;
 volatile static uint16_t vals[NUMVAL];
 uint8_t isReloaded = 0;
-volatile lastValueIC = 0;
-volatile currentValueIC = 0;
+volatile uint16_t lastValueIC = 0;
+volatile uint16_t currentValueIC = 0;
 volatile uint16_t diff = 0;
 //--------------INPUT CAPTURE RING-------------------
 
@@ -132,7 +152,6 @@ volatile uint8_t saveAlarm = 0;
 uint8_t TermInfo = 0;
 uint8_t GSMSS =0;
 uint8_t VLvl;
-
 uint32_t hangCounter = 0;
 uint8_t locationDataIntervalA = 5; //Location packet interval when ignition is on
 uint8_t locationDataIntervalB = 5; //Location packet interval when ignition is off
@@ -141,11 +160,12 @@ uint8_t indicationCounter = 0;
 uint8_t crcc;
 uint8_t rCrc;
 uint8_t isFlash = 0;
+uint8_t isFlash1 = 0;
 uint8_t isAutoRst=0; // 1 = reset by nvic , 0 = force rst by wd ic
 //char validSender[11] = "3322336979";//osama
-char validSender[11] = "3352093997";//adnan
+char validSender[11] = "0000000000";//adnan
 extern uint8_t gnssCRC;
-uint8_t cPin[4];
+uint8_t cPin[4] = "1234";
 uint8_t recTimeA = 0; // non-v
 uint8_t msgCounter = 0; // non-v
 volatile uint8_t isPulse = 0;
@@ -171,8 +191,8 @@ volatile uint8_t isResponseOk = 0;
 volatile uint8_t recResponse = 0;
 uint8_t imei[8];
 //uint8_t portAdd[MAX_PORT_CHAR] = "12345";
-//uint8_t portAdd[MAX_PORT_CHAR] = "6503";//osa/ma portal
-uint8_t portAdd[MAX_PORT_CHAR] = "9000";///tanzeel portal
+//uint8_t portAdd[MAX_PORT_CHAR] = "6503"; //osama portal
+uint8_t portAdd[MAX_PORT_CHAR] = "9000";// tanzeel portal
 uint8_t domainAdd[MAX_DOMAIN_CHAR] = "182.180.188.205";
 //uint8_t domainAdd[] = "\"103.217.177.163\"";
 uint8_t msgcleared = 0;
@@ -287,143 +307,79 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim6);//AT PORT
   HAL_UART_Receive_IT(&huart2, GNSS_BUFFER, 1);
   W25qxx_Init();
-	//INPUT CAPTURE------
+
+
+	//INPUT CAPTURE--------------------------------------
   HAL_TIM_Base_Start_IT(&htim3);//input capture timer starts
   HAL_TIM_Base_Start_IT(&htim17);///GNS PORT
   HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
 
 
-	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
-	HAL_Delay(1000);
-	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 0);
 
-	W25qxx_EraseSector(0);
-	W25qxx_EraseSector(1);
-//	HAL_Delay(5000);
+  HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
+  HAL_Delay(1000);
+  HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 0);
 
+
+	//ROM INTEGRITY------------------------------------------------------------------------------------------------------------------------------
+//	W25qxx_EraseSector(0);
+//	W25qxx_EraseSector(1);
 	W25qxx_ReadByte(&isFlash, 0);
-	if (isFlash != 1) {
-		//First time
-		W25qxx_EraseSector(0);
-		W25qxx_EraseSector(1);
-
+	W25qxx_ReadByte(&isFlash1, LASTPAGE_ADD);
+	if (isFlash != 1 || isFlash1 !=1 ) {
 		StartN = 0;
 		EndN = 0;
 		StartSec = 1;
 		EndSec = 1;
-		cPin[0] = '1';
-		cPin[1] = '2';
-		cPin[2] = '3';
-		cPin[3] = '4';
-		W25qxx_WriteByte(cPin[0], 9);
-		W25qxx_WriteByte(cPin[1], 10);
-		W25qxx_WriteByte(cPin[2], 11);
-		W25qxx_WriteByte(cPin[3], 12);
-		W25qxx_WriteByte(0, 1);
-		W25qxx_WriteByte(1, 2);
-		W25qxx_WriteByte(0, 3);
-		W25qxx_WriteByte(0, 4);
-		W25qxx_WriteByte(0, 5);
-		W25qxx_WriteByte(1, 6);
-		W25qxx_WriteByte(0, 7);
-		W25qxx_WriteByte(0, 8);
-
-		for (uint8_t te = 13; te < 23; te++) {
-			W25qxx_WriteByte(0, te);
-			validSender[te - 13] = 0;
-		}
-		for (uint8_t te = 23; te < 73; te++) {
-			W25qxx_WriteByte(domainAdd[te - 23], te);
-		}
-		for (uint8_t te = 73; te < 79; te++) {
-			W25qxx_WriteByte(portAdd[te - 73], te);
-		}
-		W25qxx_WriteByte(locationDataIntervalA, 79);  //locationDataIntervalA = 5
-		W25qxx_WriteByte(locationDataIntervalB, 80);  //locationDataIntervalB = 5
-		W25qxx_WriteByte(0, 81);  //isAutoRst
-		isFlash =1;
-		W25qxx_WriteByte(isFlash, 0);//flashed now
-
-		flashready = 1;
-
-
+		W25qxx_EraseSector(1);
 
 	} else {
-		//reading from rom
+		//reading from ROM
+		uint8_t configPage[LASTPAGE_ADD+2];
+		memset(configPage, 0, sizeof(configPage));
+		W25qxx_ReadBytes(configPage, 0, LASTPAGE_ADD+2);
 
-		uint8_t myread[100];
-		memset(myread, 0, sizeof(myread));
-		//printf("already flashed once/n");
-		W25qxx_ReadBytes(myread, 1, 100);
-		StartSec = myread[0];
-		StartSec = StartSec << 8 | myread[1];
+		StartSec = configPage[1];
+		StartSec = StartSec << 8 | configPage[2];
 
-		StartN = myread[2];
-		StartN = StartN << 8 | myread[3];
+		StartN = configPage[3];
+		StartN = StartN << 8 | configPage[4];
 
-		EndSec = myread[4];
-		EndSec = EndSec << 8 | myread[5];
+		EndSec = configPage[5];
+		EndSec = EndSec << 8 | configPage[6];
 
-		EndN = myread[6];
-		EndN = EndN << 8 | myread[7];
+		EndN = configPage[7];
+		EndN = EndN << 8 | configPage[8];
 
-		cPin[0] = myread[8];
-		cPin[1] = myread[9];
-		cPin[2] = myread[10];
-		cPin[3] = myread[11];
+		cPin[0] = configPage[CP1_ADD];
+		cPin[1] = configPage[CP2_ADD];
+		cPin[2] = configPage[CP3_ADD];
+		cPin[3] = configPage[CP4_ADD];
+
 		for (uint8_t te = 0; te < 10; te++) {
-			validSender[te] = myread[te + 12];
+			validSender[te] = configPage[te + VALIDSENSTART_ADD];
 		}
 		for (uint8_t te = 0; te < 50; te++) {
-			domainAdd[te] = myread[te + 22];
+			domainAdd[te] = configPage[te + DOMAINSTART_ADD];
 		}
 		for (uint8_t te = 0; te < 6; te++) {
-			portAdd[te] = myread[te + 72];
+			portAdd[te] = configPage[te + PORTSTART_ADD];
 		}
-		locationDataIntervalA = myread[78];
-		locationDataIntervalB = myread[79];
-		isAutoRst = myread[80];
+		locationDataIntervalA = configPage[LDIA_ADD];
+		locationDataIntervalB = configPage[LDIB_ADD];
+		isAutoRst = configPage[AUTORST_ADD];
 		if(isAutoRst==0){
-			W25qxx_EraseSector(0);
-			W25qxx_EraseSector(1);
 			StartN = 0;
 			EndN = 0;
 			StartSec = 1;
 			EndSec = 1;
-			W25qxx_WriteByte(cPin[0], 9);
-			W25qxx_WriteByte(cPin[1], 10);
-			W25qxx_WriteByte(cPin[2], 11);
-			W25qxx_WriteByte(cPin[3], 12);
-			W25qxx_WriteByte(0, 1);
-			W25qxx_WriteByte(1, 2);
-			W25qxx_WriteByte(0, 3);
-			W25qxx_WriteByte(0, 4);
-			W25qxx_WriteByte(0, 5);
-			W25qxx_WriteByte(1, 6);
-			W25qxx_WriteByte(0, 7);
-			W25qxx_WriteByte(0, 8);
-
-			for (uint8_t te = 13; te < 23; te++) {
-				W25qxx_WriteByte(validSender[te - 13], te);
-			}
-			for (uint8_t te = 23; te < 73; te++) {
-				W25qxx_WriteByte(domainAdd[te - 23], te);
-			}
-			for (uint8_t te = 73; te < 79; te++) {
-				W25qxx_WriteByte(portAdd[te - 73], te);
-			}
-			W25qxx_WriteByte(locationDataIntervalA, 79);  //locationDataIntervalA = 5
-			W25qxx_WriteByte(locationDataIntervalB, 80);  //locationDataIntervalB = 5
-
-
+			W25qxx_EraseSector(1);
 		}
-		isAutoRst = 0;
-		W25qxx_WriteByte(isAutoRst, 81); //isAutoRst = 0
-		isFlash = 1;
-		W25qxx_WriteByte(isFlash, 0);   //isFlash to 1 , already flashed once
-		HAL_Delay(100);
-		flashready = 1;
 	}
+	save_to_flash(0);
+	//ROM VALIDITY------------------------------------------------------------------------------------------------------------------------------
+
+
 
 
 	//-------------------check if tracker has registered any mobile number?-------------
@@ -440,8 +396,6 @@ int main(void)
 	HAL_GPIO_WritePin(PWR_KEY_GPIO_Port, PWR_KEY_Pin, 1);
 	HAL_Delay(1000);
 	HAL_GPIO_WritePin(PWR_KEY_GPIO_Port, PWR_KEY_Pin, 0);
-
-
 	HAL_Delay(5000);
 	quectel_init();
 
@@ -1233,7 +1187,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 								locationDataIntervalA = 5;
 								locationDataIntervalB = 5;
 								//---saving to flash memory
-								save_to_flash();
+								save_to_flash(0);
 								//printf("Reset Completed\n");
 							} else if (sCommand[0] == 'R'
 									&& sCommand[1] == 'N'
@@ -1251,7 +1205,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 									for (uint8_t m = 0; m < 10; m++) {
 										validSender[m] = sCommand[m + 4];
 									}
-									save_to_flash();
+									save_to_flash(0);
 									isSMSActive=1;
 									// HAL_UART_Transmit(&huart4,
 									// "NEW NUM SAVED\n", 14, 100);
@@ -1281,7 +1235,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 									cPin[2] = sCommand[10];
 									cPin[3] = sCommand[11];
 									//---saving to flash memory
-									save_to_flash();
+									save_to_flash(0);
 									//printf("NEW PIN set \n");
 								}
 							} else if (sCommand[0] == 'W'
@@ -1708,55 +1662,75 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 void rebootsystem() {
 //	HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
-	isAutoRst=1;
-	save_to_flash();
+	save_to_flash(1);
 	NVIC_SystemReset();
-
 	// todo save flash info
 }
-void save_to_flash() {
+void save_to_flash(uint8_t autoRstValue) {
+	flashready = 0;
+
+	uint8_t configPage[LASTPAGE_ADD+2];
+	memset(configPage,0,sizeof(configPage));
+	//First time
 	W25qxx_EraseSector(0);
-	W25qxx_WriteByte(1, 0);
+	isFlash =1;
+	configPage[0] = isFlash; // isflash
+
 	uint8_t t[2];
 	t[0] = StartSec >> 8;
 	t[1] = StartSec;
-	W25qxx_WriteByte(t[0], 1);
-	W25qxx_WriteByte(t[1], 2);
+	configPage[MSBSS] = t[0]; //MSB StartSec
+	configPage[LSBSS] = t[1]; //LSB StartSec
+
 	t[0] = StartN >> 8;
 	t[1] = StartN;
-	W25qxx_WriteByte(t[0], 3);
-	W25qxx_WriteByte(t[1], 4);
+	configPage[MSBSN] = t[0]; //MSB StartN
+	configPage[LSBSN] = t[1]; //LSB StartN
+
 	t[0] = EndSec >> 8;
 	t[1] = EndSec;
-	W25qxx_WriteByte(t[0], 5);
-	W25qxx_WriteByte(t[1], 6);
+	configPage[MSBES] = t[0]; //MSB EndSec
+	configPage[LSBES] = t[1]; //LSB EndSec
+
 	t[0] = EndN >> 8;
 	t[1] = EndN;
-	W25qxx_WriteByte(t[0], 7);
-	W25qxx_WriteByte(t[1], 8);
+	configPage[MSBEN] = t[0]; //MSB EndN
+	configPage[LSBEN] = t[1]; //LSB EndN
 
-	W25qxx_WriteByte(cPin[0], 9);
-	W25qxx_WriteByte(cPin[1], 10);
-	W25qxx_WriteByte(cPin[2], 11);
-	W25qxx_WriteByte(cPin[3], 12);
+	configPage[CP1_ADD] = cPin[0];  //pin 1
+	configPage[CP2_ADD] = cPin[1]; //pin 2
+	configPage[CP3_ADD] = cPin[2]; //pin 3
+	configPage[CP4_ADD] = cPin[3]; //pin 4
 
-	for (uint8_t te = 13; te < 23; te++) {
-		W25qxx_WriteByte(validSender[te - 13], te);
+	// saving valid sender
+	for (uint8_t te = VALIDSENSTART_ADD; te < VALIDSENEND_ADD+1; te++) {
+		configPage[te] = validSender[te - VALIDSENSTART_ADD];
 	}
+	//------------------------------------
 
-	for (uint8_t te = 23; te < 73; te++) {
-		W25qxx_WriteByte(domainAdd[te - 23], te);
-	}
 
-	for (uint8_t te = 73; te < 79; te++) {
-		W25qxx_WriteByte(portAdd[te - 73], te);
+	//saving domain address from 23 - 72
+	for (uint8_t te = DOMAINSTART_ADD; te < DOMAINEND_ADD+1; te++) {
+		configPage[te] = domainAdd[te - DOMAINSTART_ADD];
 	}
-	W25qxx_WriteByte(locationDataIntervalA, 79);  //locationDataIntervalA = 5
-	W25qxx_WriteByte(locationDataIntervalB, 80);  //locationDataIntervalB = 5
-	W25qxx_WriteByte(isAutoRst, 81);  //isAutoRst
+	//----------------------------------------
+
+
+	//saving port from 73 - 78
+	for (uint8_t te = PORTSTART_ADD; te < PORTEND_ADD+1; te++) {
+		configPage[te] = portAdd[te - PORTSTART_ADD];
+	}
+	//-----------------------------------
+
+	configPage[LDIA_ADD] = locationDataIntervalA;  //locationDataIntervalA = 5
+	configPage[LDIB_ADD] = locationDataIntervalB;  //locationDataIntervalB = 5
+	isAutoRst = autoRstValue;
+	configPage[AUTORST_ADD] = isAutoRst; //isAutorst
+	isFlash1 = 1;
+	configPage[LASTPAGE_ADD] = isFlash1; //isflash1
+	W25qxx_WritePage(configPage, 0, 0, LASTPAGE_ADD+2);
+	flashready = 1;
 	HAL_Delay(100);
-	// HAL_UART_Transmit(&huart4, "saved to flash",
-	// sizeof("saved to flash"), 100);
 
 }
 
@@ -2494,7 +2468,7 @@ void check_command_SERVER(char* command){
 	    	            portAdd[a-(commaPosition[1]+1)] = command[a];
 	    	        }
 	    	    }
-	    	    save_to_flash();
+	    	    save_to_flash(0);
 	    	    //todo save to flash please.
 		    }
 		    else{
@@ -2548,7 +2522,7 @@ void check_command_TIMER(char* command){
 	    locationDataIntervalB = locationDataIntervalB > 180 ? 180 : locationDataIntervalB;
 	    locationDataIntervalB = locationDataIntervalB < 5 ? 5 : locationDataIntervalB;
 	    //todo save to flash please.
-	    save_to_flash();
+	    save_to_flash(0);
     }
     else{
 //		        printf("Data is bad");
