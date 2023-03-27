@@ -54,6 +54,7 @@ void SysTick_Handler(void);
 void TIM3_IRQHandler(void);
 void TIM6_IRQHandler(void);
 void TIM14_IRQHandler(void);
+void TIM16_IRQHandler(void);
 void TIM17_IRQHandler(void);
 void SPI1_IRQHandler(void);
 void USART1_IRQHandler(void);

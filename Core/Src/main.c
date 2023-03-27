@@ -94,6 +94,7 @@ SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim14;
+TIM_HandleTypeDef htim16;
 TIM_HandleTypeDef htim17;
 
 UART_HandleTypeDef huart1;
@@ -110,7 +111,6 @@ float frequency = 0;
 uint16_t usWidth = 0;
 uint8_t gotIndication = 0;
 volatile static uint16_t vals[NUMVAL];
-uint8_t isReloaded = 0;
 volatile uint16_t lastValueIC = 0;
 volatile uint16_t currentValueIC = 0;
 volatile uint16_t diff = 0;
@@ -146,8 +146,9 @@ static const uint16_t crctab16[] = { 0X0000, 0X1189, 0X2312, 0X329B, 0X4624,
 		0X1FF9, 0XF78F, 0XE606, 0XD49D, 0XC514, 0XB1AB, 0XA022, 0X92B9, 0X8330,
 		0X7BC7, 0X6A4E, 0X58D5, 0X495C, 0X3DE3, 0X2C6A, 0X1EF1, 0X0F78, };
 
-
-
+uint8_t isNumValid = 0; //kia recipient ka number valid hai?
+volatile uint16_t tcpOpenElapsedTime = 0;
+volatile uint8_t msgPacketSaveInterval = 60; //5-180
 uint8_t isGpsValid = 0;
 uint8_t gpsSpeed = 0;
 uint8_t relayState = 0; //CAR IS ON
@@ -199,6 +200,7 @@ volatile uint8_t commandCase = 0;
 volatile uint8_t isResponseOk = 0;
 volatile uint8_t recResponse = 0;
 uint8_t imei[8];
+char imeiChar[20];
 //uint8_t portAdd[MAX_PORT_CHAR] = "12345";
 //uint8_t portAdd[MAX_PORT_CHAR] = "6503"; //osama portal
 uint8_t portAdd[MAX_PORT_CHAR] = "9000";// tanzeel portal
@@ -210,6 +212,7 @@ char nmeaResponse[NMEA_MAX_LINES][NMEA_MAX_CHARS];
 volatile uint8_t isTcpOpen = 0;
 uint8_t isReg = 0;
 uint8_t isWhereApiCalled = 0;
+uint8_t isIMEIApiCalled = 0;
 volatile uint8_t isLoggedIn = 0;
 uint8_t processComplete = 0;
 uint8_t processCount = 0;
@@ -244,6 +247,7 @@ static void MX_USART4_UART_Init(void);
 static void MX_TIM17_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
 
 //char* int2string(int num, char *str);
@@ -311,8 +315,11 @@ int main(void)
   MX_TIM17_Init();
   MX_TIM14_Init();
   MX_TIM6_Init();
+  MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
+
   HAL_TIM_Base_Start_IT(&htim14);//watchDog Timer
+  HAL_TIM_Base_Start_IT(&htim16);//tcp open checking timer
   HAL_TIM_Base_Start_IT(&htim6);//AT PORT
   HAL_UART_Receive_IT(&huart2, GNSS_BUFFER, 1);
   W25qxx_Init();
@@ -395,7 +402,10 @@ int main(void)
 
 	//-------------------check if tracker has registered any mobile number?-------------
 	if(validSender[0] == 0 && validSender[1] == 0 && validSender[2] == 0){
-		isSMSActive=0;
+		isNumValid=0;
+	}
+	else{
+		isNumValid=1;
 	}
 	//----------------------------------------------------------------------------------
 
@@ -728,6 +738,38 @@ static void MX_TIM14_Init(void)
   /* USER CODE BEGIN TIM14_Init 2 */
 
   /* USER CODE END TIM14_Init 2 */
+
+}
+
+/**
+  * @brief TIM16 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM16_Init(void)
+{
+
+  /* USER CODE BEGIN TIM16_Init 0 */
+
+  /* USER CODE END TIM16_Init 0 */
+
+  /* USER CODE BEGIN TIM16_Init 1 */
+
+  /* USER CODE END TIM16_Init 1 */
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 6400;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 10000-1;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM16_Init 2 */
+
+  /* USER CODE END TIM16_Init 2 */
 
 }
 
@@ -1073,7 +1115,20 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim == &htim16) {
+			//tcp open checking timer
+		if(isTcpOpen == 0){
+			tcpOpenElapsedTime++;
+		}
+		else{
+			tcpOpenElapsedTime=0;
+		}
+		if(tcpOpenElapsedTime > 1200){
+			//more than 20 minutes
+			rebootsystem();
+		}
 
+	}
 	if (htim == &htim14) {
 		//watchdog timer
 
@@ -1225,8 +1280,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 									for (uint8_t m = 0; m < 10; m++) {
 										validSender[m] = sCommand[m + 4];
 									}
-									save_to_flash(0);
-									isSMSActive=1;
+									if(validSender[0] == 0 && validSender[1] == 0 && validSender[2] == 0){
+										isNumValid=0;
+									}else{
+										isNumValid=1;
+									}
 									// HAL_UART_Transmit(&huart4,
 									// "NEW NUM SAVED\n", 14, 100);
 
@@ -1306,14 +1364,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 									&& isOwner == 1) {
 								//TIMER CONFIG COMMAND RECEIVED
 								check_command_RELAY(sCommand);///handle the TIMER CONFIG COMMAND
+							} else if (sCommand[0] == 'I'
+									&& sCommand[1] == 'N'
+									&& sCommand[2] == 'F'
+									&& sCommand[3] == 'O'
+									&& isOwner == 1) {
+								//INFO COMMAND RECEIVED
+								isIMEIApiCalled = 1;
 							}
-
 						}
-
 					}
-
 				}
-
 			}
 		}
 		if (commandCase == 0) {
@@ -1469,6 +1530,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 				memset(p, 0, sizeof(p));
 				char *myt;
 				myt = responseBuffer[tLine - 2];
+
+				//make a copy of text based imei
+				memset(imeiChar,0,sizeof(imeiChar));
+				strncpy(imeiChar,myt,15);
+				//-------------------------------------
+
 				strncpy(p, myt, 1);
 				imei[0] = (int) strtol(p, NULL, 16);
 				myt++;
@@ -1639,7 +1706,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	}
 	else if(htim == &htim3){
-		isReloaded ++;
 		//---------input capture timer.
 
 	}
@@ -1697,7 +1763,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		}
 		HAL_TIM_Base_Stop_IT(&htim17);
 		isGNSSTimStart = 0;
-		if (tim6Count > 5) {
+		if (tim6Count > msgPacketSaveInterval) {
 			if (isLoggedIn == 0 && isTcpOpen == 0 && flashready == 1) {
 				save_data_packet();
 			}
@@ -1921,6 +1987,15 @@ void where_api_handler() {
 		if (isReg == 1) {
 			send_current_location_via_sms(); //sending current location
 			isWhereApiCalled = 0;
+		}
+	}else if (isIMEIApiCalled == 1) {
+
+		// HAL_UART_Transmit(&huart4, "S creg in api", sizeof("S creg in api"),
+		// 100);
+		send_command("AT+CREG?\r\n", 3, 3, 3, 1);
+		if (isReg == 1) {
+			send_imei_via_sms(); //sending current location
+			isIMEIApiCalled = 0;
 		}
 	}
 }
@@ -2337,8 +2412,33 @@ char* substring(char *destination, const char *source, uint8_t beg, uint8_t n) {
 	return destination;
 }
 
+void send_imei_via_sms() {
+	if (isNumValid == 1) {
+		//printf("sending message(current location)\n");
+		// send_command("AT+CMGS=\"3352093997\"\n\r", 10, 6, 0, 0);
+		char tempMsg[150];
+		memset(tempMsg, 0, sizeof(tempMsg));
+		strcat(tempMsg,"AT+CMGS=\"");
+		strcat(tempMsg,validSender);
+		strcat(tempMsg,"\"\r");
+//		strcat(tempMsg, "AT+CMGS=\"3322336979\"\r");
+		strcat(tempMsg, "IMEI:");
+		strcat(tempMsg, imeiChar);
+		//todo replace while with for loop
+		uint8_t tempCount = 0;
+		while (tempMsg[tempCount] != NULL) {
+			tempCount++;
+		}
+		tempMsg[tempCount] = 26;
+		//printf("--Sending message to mobile \n");
+		send_command(tempMsg, 12005, 7, 0, 0);
+		// char tecMsg[] = {'A','T','+','C','M','G','S','=','\"','3','3','2','2','3','3','6','9','7','9','\"','\r','h','e','l','l','o',26,0};
+		//    send_command(tecMsg, 12005, 7, 0, 0);
+	}
+}
+
 void send_current_location_via_sms() {
-	if (isSMSActive == 1) {
+	if (isNumValid == 1) {
 		//printf("sending message(current location)\n");
 		// send_command("AT+CMGS=\"3352093997\"\n\r", 10, 6, 0, 0);
 		char tempMsg[150];
@@ -2384,8 +2484,8 @@ void send_current_location_via_sms() {
 		memset(buf, 0, sizeof(buf));
 		int2string(speed, buf);
 		strcat(tempMsg, buf);
-		uint8_t tempCount = 0;
 
+		uint8_t tempCount = 0;
 		//todo replace while with for loop
 		while (tempMsg[tempCount] != NULL) {
 			tempCount++;
@@ -2655,6 +2755,7 @@ void check_command_MSGCFG(char* command){
 	    		isSMSActive = 1;
 	    	}
 	    }
+	    save_to_flash(0);
     }
     else{
 //		        printf("Data is bad");
