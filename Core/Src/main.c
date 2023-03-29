@@ -159,6 +159,8 @@ volatile uint8_t accInputStatex = 0;
 volatile uint8_t accInputHigh = 0;
 volatile uint8_t accInputLow = 0;
 volatile uint8_t saveAlarm = 0;
+
+uint16_t voltage = 4400; //current voltage of vbatt.
 uint8_t TermInfo = 0;
 uint8_t GSMSS =0;
 uint8_t VLvl;
@@ -401,7 +403,7 @@ int main(void)
 
 
 	//-------------------check if tracker has registered any mobile number?-------------
-	if(validSender[0] == 0 && validSender[1] == 0 && validSender[2] == 0){
+	if(validSender[0] == '0' && validSender[1] == '0' && validSender[2] == '0'){
 		isNumValid=0;
 	}
 	else{
@@ -1280,7 +1282,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 									for (uint8_t m = 0; m < 10; m++) {
 										validSender[m] = sCommand[m + 4];
 									}
-									if(validSender[0] == 0 && validSender[1] == 0 && validSender[2] == 0){
+									if(validSender[0] == '0' && validSender[1] == '0' && validSender[2] == '0'){
 										isNumValid=0;
 									}else{
 										isNumValid=1;
@@ -1701,9 +1703,62 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 					clearit();
 				}
 			}
+		} else if (commandCase == 8) { //battery voltage response check
+			uint8_t tLine = 99;
 
+			char *ptr;
+			char *ptr2;
+			char vData[20];
+			memset(vData,0,sizeof(vData));
+
+			for (uint8_t i = 0; i < RESPONSE_MAX_LINE; i++) {
+				ptr = strstr(responseBuffer[i], "+CBC:");
+				ptr2 = strstr(responseBuffer[i], "ERROR");
+				if (ptr != NULL) {
+					tLine = i;
+					tResponse = 'G';
+					break;
+				}
+				if (ptr2 != NULL) {
+					tLine = i;
+					tResponse = 'B';
+					break;
+				}
+			}
+			if (tLine != 99) {
+				if (tResponse == 'G') {
+					uint8_t totalCommas = 0;
+					for(uint8_t coms=0;coms<15;coms++){
+						if(responseBuffer[tLine][coms]==','){
+							totalCommas++;
+						}
+						if(totalCommas==2){
+							substring(vData,responseBuffer[tLine],coms+1,4);
+							break;
+						}
+					}
+					if(totalCommas==2){
+						voltage = atoi(vData);
+					}
+					isResponseOk = 1;
+					clearit();
+
+				} else if (tResponse == 'B') {
+					isResponseOk = 1;
+					clearit();
+
+				}
+			} else {
+				resTimeout--;
+				if (resTimeout < 1) {
+					if (!recResponse) {
+						rebootsystem();
+					}
+					isResponseOk = 0;
+					clearit();
+				}
+			}
 		}
-
 	}
 	else if(htim == &htim3){
 		//---------input capture timer.
@@ -1899,6 +1954,8 @@ void quectel_init() {
 	// printf("--Sending AT-- \n");
 	send_command("AT\r\n", 3, 1, 1, 1);
 	ab = 2;
+	send_command("AT+CBC\r\n", 4, 8, 3, 1);//get voltage of vbatt
+
 
 	// printf("--sending AT+QIURC=1--\n");
 	// send_command("AT+QIURC=1\r\n", 3, 1, 1,1);
@@ -2234,8 +2291,13 @@ uint8_t read_data_packet() {
 
 void create_status_info(){
 
+	//----------get voltage of vbatt-----------------
+	send_command("AT+CBC\r\n", 4, 8, 3, 1);
+	//-----------------------------------------------
+
 	uint8_t SigStre = 20;
-	int voltage = 4400;
+
+//	int voltage = 4400;
 	//if relay is cut
 	if (0) {
 		TermInfo = TermInfo | 0x80;
@@ -2277,21 +2339,21 @@ void create_status_info(){
 	if (1) {
 		TermInfo = TermInfo | 0x1;
 	}
-	if (voltage > 4400) {
+	if (voltage > 4110) {
 		VLvl = 6;
-	} else if (voltage > 4100) {
+	} else if (voltage > 4030) {
 		VLvl = 5;
 
-	} else if (voltage > 4000) {
+	} else if (voltage > 3950) {
 		VLvl = 4;
 
-	} else if (voltage > 3900) {
+	} else if (voltage > 3870) {
 		VLvl = 3;
 
-	} else if (voltage > 3800) {
+	} else if (voltage > 3790) {
 		VLvl = 2;
 
-	} else if (voltage > 3700) {
+	} else if (voltage > 3710) {
 		VLvl = 1;
 
 	} else {
@@ -2515,7 +2577,7 @@ void send_alarm_packet_via_sms(){
 		strcat(temMsg,"AT+CMGS=\"");
 		strcat(temMsg,validSender);
 		strcat(temMsg,"\"\r");
-		create_status_info();
+//		create_status_info();
 		for (uint8_t y = 0; y < 18; y++) {
 			tempalarm[y]  = gps_info[y];
 		}
