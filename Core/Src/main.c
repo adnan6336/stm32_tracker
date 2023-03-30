@@ -2422,39 +2422,6 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
 		}
 	}
 
-//	if (1 == 1) {
-//		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) { // if the interrupt source is channel1
-//			uint16_t IC_Val1, IC_Val2;
-//			IC_Val2 = vals[0];
-//			IC_Val1 = vals[1];
-//			if (IC_Val2 > IC_Val1) {
-//				Difference = IC_Val2 - IC_Val1;
-//			}
-//			else if (IC_Val1 > IC_Val2) {
-//				Difference = (10000 - IC_Val1) + IC_Val2;
-//			}
-//			usWidth = Difference;
-//			if (usWidth > 100 && usWidth < 200) {
-//				//printf("Got message indication\n");
-//				isPulse = 1;
-//			}
-//			//			uint16_t IC_Val1, IC_Val2;
-////			IC_Val1 = vals[0];
-////			IC_Val2 = vals[1];
-////			if (IC_Val2 > IC_Val1) {
-////				Difference = IC_Val2 - IC_Val1;
-////			} else if (IC_Val1 > IC_Val2) {
-////				Difference = (0xffff - IC_Val1) + IC_Val2;
-////			}
-////			float refClock = TIMCLOCK / (PRESCALAR);
-////			float mFactor = 1000 / refClock;
-////			usWidth = Difference * mFactor;
-////			if (usWidth > 100 && usWidth < 200) {
-////				//printf("Got message indication\n");
-////				isPulse = 1;
-////			}
-//		}
-//	}
 }
 
 char* substring(char *destination, const char *source, uint8_t beg, uint8_t n) {

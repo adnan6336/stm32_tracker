@@ -5898,28 +5898,28 @@ LOAD c:/st/stm32cubeide_1.10.1/stm32cubeide/plugins/com.st.stm32cube.ide.mcu.ext
  .debug_macro   0x00000000000179f1      0x21f ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.o
  .debug_macro   0x0000000000017c10      0x200 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.o
 
-.debug_line     0x0000000000000000    0x17cd5
+.debug_line     0x0000000000000000    0x17cd3
  .debug_line    0x0000000000000000      0xece ./Core/Src/gnss_parser.o
- .debug_line    0x0000000000000ece     0x29b5 ./Core/Src/main.o
- .debug_line    0x0000000000003883      0x988 ./Core/Src/stm32g0xx_hal_msp.o
- .debug_line    0x000000000000420b      0x875 ./Core/Src/stm32g0xx_it.o
- .debug_line    0x0000000000004a80      0x7fe ./Core/Src/syscalls.o
- .debug_line    0x000000000000527e      0x4f4 ./Core/Src/sysmem.o
- .debug_line    0x0000000000005772      0x7aa ./Core/Src/system_stm32g0xx.o
- .debug_line    0x0000000000005f1c     0x12ae ./Core/Src/w25qxx.o
- .debug_line    0x00000000000071ca       0x89 ./Core/Startup/startup_stm32g070cbtx.o
- .debug_line    0x0000000000007253      0xa4d ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal.o
- .debug_line    0x0000000000007ca0      0xb61 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_cortex.o
- .debug_line    0x0000000000008801      0xd81 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma.o
- .debug_line    0x0000000000009582      0xb4d ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_gpio.o
- .debug_line    0x000000000000a0cf      0x97d ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr_ex.o
- .debug_line    0x000000000000aa4c      0xef5 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc.o
- .debug_line    0x000000000000b941      0xb19 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc_ex.o
- .debug_line    0x000000000000c45a     0x1ecb ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi.o
- .debug_line    0x000000000000e325     0x3be5 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim.o
- .debug_line    0x0000000000011f0a     0x1c2f ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim_ex.o
- .debug_line    0x0000000000013b39     0x33bd ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.o
- .debug_line    0x0000000000016ef6      0xddf ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.o
+ .debug_line    0x0000000000000ece     0x29b3 ./Core/Src/main.o
+ .debug_line    0x0000000000003881      0x988 ./Core/Src/stm32g0xx_hal_msp.o
+ .debug_line    0x0000000000004209      0x875 ./Core/Src/stm32g0xx_it.o
+ .debug_line    0x0000000000004a7e      0x7fe ./Core/Src/syscalls.o
+ .debug_line    0x000000000000527c      0x4f4 ./Core/Src/sysmem.o
+ .debug_line    0x0000000000005770      0x7aa ./Core/Src/system_stm32g0xx.o
+ .debug_line    0x0000000000005f1a     0x12ae ./Core/Src/w25qxx.o
+ .debug_line    0x00000000000071c8       0x89 ./Core/Startup/startup_stm32g070cbtx.o
+ .debug_line    0x0000000000007251      0xa4d ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal.o
+ .debug_line    0x0000000000007c9e      0xb61 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_cortex.o
+ .debug_line    0x00000000000087ff      0xd81 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_dma.o
+ .debug_line    0x0000000000009580      0xb4d ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_gpio.o
+ .debug_line    0x000000000000a0cd      0x97d ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_pwr_ex.o
+ .debug_line    0x000000000000aa4a      0xef5 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc.o
+ .debug_line    0x000000000000b93f      0xb19 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_rcc_ex.o
+ .debug_line    0x000000000000c458     0x1ecb ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_spi.o
+ .debug_line    0x000000000000e323     0x3be5 ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim.o
+ .debug_line    0x0000000000011f08     0x1c2f ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_tim_ex.o
+ .debug_line    0x0000000000013b37     0x33bd ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart.o
+ .debug_line    0x0000000000016ef4      0xddf ./Drivers/STM32G0xx_HAL_Driver/Src/stm32g0xx_hal_uart_ex.o
 
 .debug_str      0x0000000000000000    0x93290
  .debug_str     0x0000000000000000    0x8bdcd ./Core/Src/gnss_parser.o
