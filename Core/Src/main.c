@@ -1095,7 +1095,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 			FIX_TIMER_TRIGGER(&htim6);
 			HAL_TIM_Base_Start_IT(&htim6);
 		}
-		TIM16->CNT &= 0x0;
+		TIM6->CNT &= 0x0;
 		HAL_UART_Receive_IT(&AT_PORT, AT_BUFFER, 1);
 		if (AT_BUFFER[0] == '\n') {
 			if (lineCount > RESPONSE_MAX_LINE - 2) {
@@ -1205,16 +1205,27 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		} else {
 			uint8_t tLine = 99;
 			char *ptr;
+			char *ptr2;
+			char *ptr3;
 			uint8_t tIndex;
 			//message handling here------------------------------------------
 			for (uint8_t i = 0; i <= RESPONSE_MAX_LINE; i++) {
 				ptr = strstr(responseBuffer[i], "+CMT:");
+				ptr2 = strstr(responseBuffer[i], "SMS Ready");
+				ptr3 = strstr(responseBuffer[i], "Call Ready");
 				if (ptr != NULL) {
+					tLine = i;
+					break;
+				}else if (ptr2 != NULL || ptr3 != NULL) {
 					tLine = i;
 					break;
 				}
 			}
-			if (tLine != 99) {
+			if (tLine != 99 && (ptr2 != NULL || ptr3 != NULL)){
+				//SMS Ready received
+				clearit();
+			}
+			else if (tLine != 99 && ptr != NULL) {
 				//some message is received!!!.
 				//---check the sender's number.
 				char sender[50];
@@ -1378,6 +1389,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 					}
 				}
 			}
+			clearit();
 		}
 		if (commandCase == 0) {
 			char *ptr;
@@ -2292,7 +2304,21 @@ uint8_t read_data_packet() {
 void create_status_info(){
 
 	//----------get voltage of vbatt-----------------
+	send_command("+++", 10, 1, 0, 0);
+	isDataMode = 0;
 	send_command("AT+CBC\r\n", 4, 8, 3, 1);
+	//HAL_UART_Transmit(&huart4, "S msg del", sizeof("S msg del"), 100);
+	send_command("AT+QMGDA=\"DEL ALL\"\r\n", 50, 1, 0, 0);
+	send_command("ATO\r\n", 10, 6, 0, 0);
+	if (isResponseOk == 1) {
+		isDataMode = 1;
+		// HAL_UART_Transmit(&huart4, "conn resum",
+		// sizeof("conn resum"), 100);
+	} else {
+		isLoggedIn = 0;
+		isDataMode = 0;
+		isTcpOpen = 0;
+	}
 	//-----------------------------------------------
 
 	uint8_t SigStre = 20;
