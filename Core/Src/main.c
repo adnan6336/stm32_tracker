@@ -1119,7 +1119,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if (htim == &htim16) {
 			//tcp open checking timer
-		if(isTcpOpen == 0){
+		if(isTcpOpen == 0 || isLoggedIn == 0){
 			tcpOpenElapsedTime++;
 		}
 		else{
@@ -1388,8 +1388,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 						}
 					}
 				}
+				clearit();
 			}
-			clearit();
+
 		}
 		if (commandCase == 0) {
 			char *ptr;
@@ -1423,7 +1424,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		}
 
 		// }
-		if (commandCase == 1) {
+		else if (commandCase == 1) {
 			uint8_t tLine = 99;
 			char *ptr;
 			char *ptr2;
@@ -1460,7 +1461,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 					if (!recResponse) {
 						//printf("TIMEOUT HASH TAG\n");
 						rebootsystem();
-
 					}
 					clearit();
 					isResponseOk = 0;
@@ -1486,7 +1486,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 				if (resTimeout < 1) {
 					if (!recResponse) {
 						rebootsystem();
-
 					}
 					clearit();
 					isResponseOk = 0;
@@ -1625,7 +1624,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 				}
 			}
 		}
-		if (commandCase == 6) {
+		else if (commandCase == 6) {
 			uint8_t tLine = 99;
 			char *ptr;
 			char *ptr2;
