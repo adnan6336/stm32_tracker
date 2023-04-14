@@ -35,6 +35,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define LED2_WAIT_TIME 50 // 50 means 5 second
 #define MAX_INPUT_COUNTS 2 //counts before changing input state.
 #define NMEA_MAX_CHARS 85
 #define NMEA_MAX_LINES 4
@@ -93,6 +94,7 @@ SPI_HandleTypeDef hspi1;
 
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 TIM_HandleTypeDef htim14;
 TIM_HandleTypeDef htim16;
 TIM_HandleTypeDef htim17;
@@ -233,6 +235,10 @@ volatile uint16_t EndN;
 volatile uint16_t StartSec;
 volatile uint16_t EndSec;
 volatile uint8_t flashready = 0;
+volatile uint8_t systemStateCounter = 0;
+volatile uint8_t isSystemLedOn = 0;//led 2 is off
+volatile uint8_t totalBlinks = 5; //5 blinks means restart state
+volatile uint8_t blinkCounter = 0;
 uint8_t stats = 0;
 
 /* USER CODE END PV */
@@ -250,6 +256,7 @@ static void MX_TIM17_Init(void);
 static void MX_TIM14_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM16_Init(void);
+static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 
 //char* int2string(int num, char *str);
@@ -318,11 +325,13 @@ int main(void)
   MX_TIM14_Init();
   MX_TIM6_Init();
   MX_TIM16_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_TIM_Base_Start_IT(&htim14);//watchDog Timer
   HAL_TIM_Base_Start_IT(&htim16);//tcp open checking timer
   HAL_TIM_Base_Start_IT(&htim6);//AT PORT
+  HAL_TIM_Base_Start_IT(&htim7);//system state timer
   HAL_UART_Receive_IT(&huart2, GNSS_BUFFER, 1);
   W25qxx_Init();
 
@@ -443,13 +452,16 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1) {
 		while (isTcpOpen == 0 && isLoggedIn == 0) {
+
 			stats = 1;
 			while (isReg == 0) {
+
 				stats = 2;
 				// HAL_UART_Transmit(&huart4, "at+creg",
 				// sizeof("at+creg"), 100);
 				send_command("AT+CREG?\r\n", 3, 3, 5, 1);
 				if (!isReg) {
+					totalBlinks = 4; // not register (2.5 second blink)
 					HAL_Delay(10000);
 					stats = 3;
 					rebootCounter++;
@@ -458,8 +470,9 @@ int main(void)
 					}
 				}
 			}
+			totalBlinks = 3; // sim registered (1 second blink)
 			if (estabilish_tcp() == 1) {
-				stats = 4;
+				totalBlinks = 2; // tcp opened (0.5 second blink)
 				// HAL_UART_Transmit(&huart4, "Loginpacket sending",
 				// sizeof("loginpacket sending"), 100);
 				send_login_packet();
@@ -475,7 +488,7 @@ int main(void)
 				}
 			}
 			else {
-				stats = 5;
+
 				recTimeA = 0;
 				while (recTimeA < rTime) { //18 to 180
 					HAL_Delay(1000);
@@ -490,6 +503,7 @@ int main(void)
 			}
 		}
 		while (isTcpOpen == 1 && isLoggedIn == 1 && isDataMode == 1) {
+			totalBlinks = 1; // (all good 100ms blink)
 			stats = 7;
 			uint8_t tempDelayCounter=0;
 			while(isAlarm == 0){
@@ -709,6 +723,44 @@ static void MX_TIM6_Init(void)
   /* USER CODE BEGIN TIM6_Init 2 */
 
   /* USER CODE END TIM6_Init 2 */
+
+}
+
+/**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 6400;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 1000-1;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
 
 }
 
@@ -1117,6 +1169,27 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if(htim == &htim7){
+
+		if(isSystemLedOn){
+			blinkCounter++;
+			HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 0);
+			isSystemLedOn = 0;
+		}
+		else{
+			if(blinkCounter<totalBlinks){
+				HAL_GPIO_WritePin(LED_2_GPIO_Port, LED_2_Pin, 1);
+				isSystemLedOn = 1;
+			}
+			else{
+				systemStateCounter++;
+				if(systemStateCounter>LED2_WAIT_TIME){
+					blinkCounter = 0;
+					systemStateCounter = 0;
+				}
+			}
+		}
+	}
 	if (htim == &htim16) {
 			//tcp open checking timer
 		if(isTcpOpen == 0 || isLoggedIn == 0){
@@ -1158,6 +1231,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 		//---------------------------------------------------------------------------
 
 		HAL_GPIO_TogglePin(WD_GPIO_Port, WD_Pin);
+//		HAL_GPIO_TogglePin(LED_1_GPIO_Port, LED_1_Pin);
 		hangCounter++;
 		if(hangCounter>25){
 			//if system hangs for more than 10 seconds.
